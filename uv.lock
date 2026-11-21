@@ -1852,9 +1852,10 @@ wheels = [
 
 [[package]]
 name = "poseidon-agent"
-version = "0.1.0a0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "litellm" },
     { name = "python-dotenv" },
     { name = "rich" },
@@ -1870,6 +1871,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.27,<1" },
     { name = "litellm", specifier = ">=1.60,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<10" },
     { name = "python-dotenv", specifier = ">=1.0,<2" },

@@ -40,13 +40,23 @@ def cli() -> None:
 def run_phase(
     phase: Annotated[
         str,
-        typer.Option("--phase", help="Identificador de la fase; por ejemplo: 1b."),
+        typer.Option(
+            "--phase",
+            help="Fase o alias; por ejemplo: 1a, spec, 1b, goldfish, 2, tdd.",
+        ),
     ],
     spec: Annotated[
         str | None,
         typer.Option(
             "--spec",
             help="Ruta al spec Markdown; opcional para Context Bootstrap y la Fase 1a.",
+        ),
+    ] = None,
+    context: Annotated[
+        str | None,
+        typer.Option(
+            "--context",
+            help="Ruta a un Markdown de contexto; se inyecta antes del spec.",
         ),
     ] = None,
     model: Annotated[
@@ -60,7 +70,12 @@ def run_phase(
 
     try:
         runner = PhaseRunner()
-        runner.run(phase=phase, spec_path=spec, model_name=model)
+        runner.run(
+            phase=phase,
+            spec_path=spec,
+            model_name=model,
+            context_path=context,
+        )
     except GateError as exc:
         error_console.print(str(exc), style="bold red", markup=False)
         raise typer.Exit(code=1) from None

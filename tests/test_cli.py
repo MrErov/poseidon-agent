@@ -19,7 +19,9 @@ def test_run_command_executes_requested_phase(tmp_path: Path, monkeypatch) -> No
     monkeypatch.chdir(tmp_path)
     skills_dir = tmp_path / ".meta-skills"
     skills_dir.mkdir()
-    (skills_dir / "1b.md").write_text("Instrucciones Goldfish", encoding="utf-8")
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Instrucciones Goldfish", encoding="utf-8"
+    )
     spec = tmp_path / "spec.md"
     spec.write_text("Especificación de prueba", encoding="utf-8")
 
@@ -41,6 +43,41 @@ def test_run_command_executes_requested_phase(tmp_path: Path, monkeypatch) -> No
     assert "Aislando Memoria para Goldfish" in result.output
     assert "Respuesta" in result.output
     assert completion.call_args.kwargs["model"] == "deepseek/deepseek-chat"
+
+
+def test_run_command_injects_context_before_spec(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Instrucciones Goldfish", encoding="utf-8"
+    )
+    spec = tmp_path / "US-001.md"
+    spec.write_text("Especificación de prueba", encoding="utf-8")
+    context = tmp_path / "api.md"
+    context.write_text("Contexto de API", encoding="utf-8")
+
+    with patch("poseidon.core.litellm.completion", return_value=_response()) as completion:
+        result = cli.invoke(
+            app,
+            [
+                "run",
+                "--phase",
+                "1b",
+                "--spec",
+                str(spec),
+                "--context",
+                str(context),
+                "--model",
+                "modelo",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    user_content = completion.call_args.kwargs["messages"][1]["content"]
+    assert "Contexto de API" in user_content
+    assert user_content.index("Contexto de API") < user_content.index("Especificación de prueba")
+    assert (tmp_path / "specs" / "US-001.audit.1.md").is_file()
 
 
 def test_cli_reports_missing_phase_in_red_error_flow(tmp_path: Path, monkeypatch) -> None:
@@ -66,7 +103,9 @@ def test_cli_reports_missing_spec_and_does_not_call_litellm(
     monkeypatch.chdir(tmp_path)
     skills_dir = tmp_path / ".meta-skills"
     skills_dir.mkdir()
-    (skills_dir / "1b.md").write_text("Instrucciones Goldfish", encoding="utf-8")
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Instrucciones Goldfish", encoding="utf-8"
+    )
 
     with patch("poseidon.core.litellm.completion") as completion:
         result = cli.invoke(

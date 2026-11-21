@@ -4,9 +4,23 @@ Poseidón es el motor de ejecución determinista de **Keel Nav**. Orquesta fases
 
 ## Modelo de memoria
 
-- **Memoria Fría:** instrucciones leídas desde `Path.cwd() / ".meta-skills" / "{phase}.md"`; las fases pertenecen al proyecto objetivo, no a Poseidón.
+- **Memoria Fría:** instrucciones resueltas desde `.meta-skills/` mediante alias de fase o nombre exacto del archivo; las fases pertenecen al proyecto objetivo, no a Poseidón.
 - **Memoria Caliente:** una lista de mensajes nueva por llamada, sin historial previo.
-- **Goldfish Audit:** cualquier fase cuyo nombre contenga `goldfish` o `1b` muestra `Aislando Memoria para Goldfish` y se ejecuta sin historial.
+- **Contexto:** el contenido de `--context` se inyecta antes del `--spec` en la Memoria Caliente.
+- **Goldfish Audit:** cualquier fase resuelta como `02-egm-goldfish-audit` muestra `Aislando Memoria para Goldfish` y se ejecuta sin historial.
+
+## Alias de fases
+
+| Alias | Archivo en `.meta-skills/` |
+|-------|----------------------------|
+| `0`, `00`, `context` | `00-context-bootstrap.md` |
+| `1a`, `spec` | `01-sdd-spec-writer.md` |
+| `1b`, `goldfish` | `02-egm-goldfish-audit.md` |
+| `2`, `tdd` | `03-tdd-cycle.md` |
+| `3`, `odd` | `04-odd-vertical-slice.md` |
+| `4`, `drift` | `05-drift-control.md` |
+
+También puedes pasar el nombre exacto del archivo, con o sin `.md`. Si la fase no coincide con un alias, Poseidón busca un `.md` cuyo nombre empiece por la fase o la contenga; si no encuentra ninguno, termina con un error controlado. Esta resolución se usa tanto para cargar la Memoria Fría como para decidir el guardado de artefactos y la actualización del spec.
 
 ## Requisitos e instalación
 
@@ -24,9 +38,10 @@ uv pip install -e .
 Crea un archivo `.env` con las credenciales del proveedor que vayas a usar. Por ejemplo:
 
 ```dotenv
-OPENAI_API_KEY=...
-DEEPSEEK_API_KEY=...
 NVIDIA_NIM_API_KEY=...
+
+# Opcional: activa Graphify MCP para las fases 1a y 1b.
+GRAPHIFY_MCP_URL=https://api.graphify.com/mcp
 ```
 
 ## Uso
@@ -34,11 +49,39 @@ NVIDIA_NIM_API_KEY=...
 Ejecuta Poseidón desde la raíz del proyecto que contiene `.meta-skills/`. El argumento `--spec` es opcional para fases como Context Bootstrap y 1a:
 
 ```bash
-poseidon run --phase 00-context-bootstrap --model deepseek/deepseek-chat
-poseidon run --phase 1b --spec path/to/spec.md --model deepseek/deepseek-chat
+poseidon run --phase 00-context-bootstrap --model nvidia_nim/<modelo-disponible>
+poseidon run --phase 1a --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<modelo-disponible>
+poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<modelo-disponible>
 ```
 
-También puedes usar, por ejemplo, `openai/gpt-4o-mini` o un modelo compatible con `nvidia_nim/`. Las claves se cargan automáticamente desde `.env`.
+Sustituye `<modelo-disponible>` por el identificador del modelo que tengas habilitado en NVIDIA NIM. Las credenciales se cargan automáticamente desde `.env`.
+
+### Graphify MCP (opcional)
+
+Define `GRAPHIFY_MCP_URL` para enriquecer las fases `1a` y `1b` con contexto del grafo de código. La URL predeterminada sugerida es `https://api.graphify.com/mcp`. Poseidón consulta usando la ruta de `--spec`, o la de `--context` si no hay spec, e inyecta la respuesta entre el contexto y la especificación.
+
+Si la variable no está configurada, está vacía, la petición falla o la respuesta no contiene texto aprovechable, Poseidón continúa sin contexto Graphify y sin interrumpir la ejecución.
+
+### Artefactos automáticos
+
+Las fases que producen Markdown se guardan en `specs/` (relativo al proyecto donde se invoca Poseidón):
+
+| Fase | Archivo generado |
+|------|------------------|
+| `1a` | `specs/<nombre>.spec.md` |
+| `1b` o `goldfish` | `specs/<nombre>.audit.<N>.md` (el siguiente número libre) |
+| `2` o superior | Solo consola; la salida estructurada se gestionará en una versión futura |
+
+El nombre se deriva del `--spec` (o del `--context` si no hay spec), eliminando la extensión `.md` o `.spec.md`. Al guardar, Poseidón muestra `✅ Guardado en specs/...` en verde. Un fallo de escritura se reporta como error controlado con código de salida `1`.
+
+### Máquina de estados del spec
+
+Después de una auditoría `1b` o `goldfish`, Poseidón busca `verdict` o `effective_verdict` en el reporte generado:
+
+- `audited`: actualiza únicamente el frontmatter del spec (`status: draft` → `status: audited` y `goldfish_audit: pending` → `specs/<nombre>.audit.<N>.md`) y muestra `✅ Spec actualizado a status: audited`.
+- `rejected` o veredicto ausente: no modifica el spec y muestra `⚠️ Auditoría rechazada. El spec sigue en draft.`
+
+La actualización se limita al frontmatter inicial: `us_id`, `created_at` y el resto de campos y del cuerpo Markdown se conservan intactos.
 
 ### Gatekeeper TDD
 
