@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.pytest-tmp/
+.tmp/
+/pytest-of-hp/
+.ruff_cache/
+.uv-cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Entornos y secretos
+.venv/
+.env
+
+# Recursos locales de Keel Nav y pruebas de humo
+/.dsh-acl-recovery/
+/.meta-skills/
+/dummy-spec.md
+/dummy.spec.md
+
+# IDE
+.idea/
+.vscode/
