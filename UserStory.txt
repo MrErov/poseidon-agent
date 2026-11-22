@@ -1,0 +1,1 @@
+Como usuario, quiero un endpoint `/health` que devuelva el estado del servidor en JSON, para que mi sistema de monitoreo (Kubernetes) sepa si está vivo. Fuera de alcance: métricas de CPU.

@@ -56,6 +56,26 @@ poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --m
 
 Sustituye `<modelo-disponible>` por el identificador del modelo que tengas habilitado en NVIDIA NIM. Las credenciales se cargan automáticamente desde `.env`.
 
+### Ejecutores locales (Delegation Engine)
+
+Con `--executor api` (valor predeterminado), Poseidón usa LiteLLM y `--model` es obligatorio. También puedes delegar el prompt a un CLI local ya instalado y autenticado; en ese caso `--model` se omite y la herramienta usa su propia configuración:
+
+```bash
+poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --executor claude-code
+poseidon run --phase 2 --spec specs/US-001.md --executor codex
+poseidon run --phase 0 --executor opencode
+```
+
+| Executor | Invocación |
+|----------|------------|
+| `claude-code` | `claude -p --output-format text`, con el prompt por stdin |
+| `codex` | `codex exec <prompt>` |
+| `opencode` | `opencode run <prompt>` |
+
+Cada delegación recibe un prompt nuevo, incluida la ejecución aislada de Goldfish. Los subprocesos tienen un timeout de 300 segundos, no usan shell y lanzan un error controlado si el ejecutable no está disponible, exceden el tiempo o terminan con código distinto de cero.
+
+Si el ejecutable no está en `PATH`, puedes indicar su ruta con `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` o `POSEIDON_OPENCODE_BIN`.
+
 ### Graphify MCP (opcional)
 
 Define `GRAPHIFY_MCP_URL` para enriquecer las fases `1a` y `1b` con contexto del grafo de código. La URL predeterminada sugerida es `https://api.graphify.com/mcp`. Poseidón consulta usando la ruta de `--spec`, o la de `--context` si no hay spec, e inyecta la respuesta entre el contexto y la especificación.
@@ -101,7 +121,9 @@ Estructura principal:
 
 ```text
 src/poseidon/
-├── core.py       # PhaseRunner, memoria y comunicación con LiteLLM
-├── main.py       # CLI de Typer y manejo de errores
+├── core.py        # PhaseRunner, memoria y selección de ejecutor
+├── delegator.py   # Delegación a CLIs locales con subprocesos
+├── main.py        # CLI de Typer y manejo de errores
+├── mcp_client.py  # Integración opcional con Graphify MCP
 └── __init__.py
 ```

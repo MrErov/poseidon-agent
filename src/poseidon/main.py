@@ -60,13 +60,29 @@ def run_phase(
         ),
     ] = None,
     model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help="Modelo de LiteLLM; obligatorio solo cuando executor='api'.",
+        ),
+    ] = None,
+    executor: Annotated[
         str,
-        typer.Option("--model", help="Modelo de LiteLLM; por ejemplo: deepseek/deepseek-chat."),
-    ] = ...,
+        typer.Option(
+            "--executor",
+            help="Ejecutor: api, claude-code, codex u opencode.",
+        ),
+    ] = "api",
 ) -> None:
-    """Ejecuta una fase de Keel Nav con un modelo y una especificación opcional."""
+    """Ejecuta una fase mediante LiteLLM o un CLI local."""
     _configure_utf8_output()
     load_dotenv()
+    if executor.strip().lower() == "api" and not (model and model.strip()):
+        error_console.print(
+            "[bold red]Error:[/bold red] "
+            "[red]--model es obligatorio cuando --executor=api.[/red]"
+        )
+        raise typer.Exit(code=1)
 
     try:
         runner = PhaseRunner()
@@ -75,6 +91,7 @@ def run_phase(
             spec_path=spec,
             model_name=model,
             context_path=context,
+            executor=executor,
         )
     except GateError as exc:
         error_console.print(str(exc), style="bold red", markup=False)

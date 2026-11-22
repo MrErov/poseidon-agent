@@ -11,6 +11,7 @@ import litellm
 from rich.console import Console
 from rich.markdown import Markdown
 
+from poseidon.delegator import DelegationError, LocalCLIDelegator
 from poseidon.mcp_client import fetch_graph_context
 
 _PHASE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -19,6 +20,7 @@ _STATUS_PATTERN = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _ALLOWED_GATE_STATUSES = {"audited", "approved"}
+_LOCAL_EXECUTORS = {"claude-code", "codex", "opencode"}
 _PHASE_ALIASES: dict[str, str] = {
     "0": "00-context-bootstrap.md",
     "00": "00-context-bootstrap.md",
@@ -72,18 +74,31 @@ class ArtifactSaveError(PoseidonError):
 class PhaseRunner:
     """Ejecuta fases del proyecto actual sin conservar historial entre llamadas."""
 
-    def __init__(self, console: Console | None = None) -> None:
+    def __init__(
+        self,
+        console: Console | None = None,
+        delegator: LocalCLIDelegator | None = None,
+    ) -> None:
         self.console = console or Console()
+        self.delegator = delegator or LocalCLIDelegator()
 
     def run(
         self,
         phase: str,
         spec_path: str | None,
-        model_name: str,
+        model_name: str | None = None,
         context_path: str | None = None,
+        executor: str = "api",
     ) -> str:
         """Valida y ejecuta una fase, guardando su artefacto cuando corresponda."""
         self.validate_gates(phase, spec_path or "")
+        executor = executor.strip().lower()
+        if executor != "api" and executor not in _LOCAL_EXECUTORS:
+            raise InputValidationError(f"Executor no soportado: '{executor}'.")
+        if executor == "api" and not (model_name and model_name.strip()):
+            raise InputValidationError(
+                "El parámetro --model es obligatorio cuando executor='api'."
+            )
 
         phase_file = self._resolve_phase_file(phase)
         phase_kind = self._phase_kind(phase, phase_file)
@@ -133,19 +148,28 @@ class PhaseRunner:
             graph_context=graph_context,
         )
 
-        try:
-            response = litellm.completion(
-                model=model_name,
-                messages=messages,
-                temperature=0.0,
-            )
-        except Exception as exc:
-            raise CompletionError(
-                f"No se pudo ejecutar la fase '{phase}' con el modelo "
-                f"'{model_name}': {exc}"
-            ) from exc
+        if executor == "api":
+            try:
+                response = litellm.completion(
+                    model=model_name,
+                    messages=messages,
+                    temperature=0.0,
+                )
+            except Exception as exc:
+                raise CompletionError(
+                    f"No se pudo ejecutar la fase '{phase}' con el modelo "
+                    f"'{model_name}': {exc}"
+                ) from exc
+            content = self._extract_content(response)
+        else:
+            prompt = self._format_messages_for_cli(messages)
+            try:
+                content = self.delegator.execute(prompt, executor)
+            except DelegationError as exc:
+                raise CompletionError(
+                    f"No se pudo ejecutar la fase '{phase}' con '{executor}': {exc}"
+                ) from exc
 
-        content = self._extract_content(response)
         self.console.print(Markdown(content))
 
         artifact_path = self._save_artifact(
@@ -572,6 +596,14 @@ class PhaseRunner:
                 "content": user_content,
             },
         ]
+
+    @staticmethod
+    def _format_messages_for_cli(messages: list[dict[str, str]]) -> str:
+        """Serializa únicamente los mensajes nuevos de esta ejecución."""
+        return "\n\n".join(
+            f"--- {message['role'].upper()} ---\n{message['content']}"
+            for message in messages
+        )
 
     @staticmethod
     def _extract_content(response: Any) -> str:

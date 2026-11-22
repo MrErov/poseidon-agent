@@ -456,3 +456,26 @@ def test_graphify_output_is_injected_into_prompt(
     assert "--- INICIO DEL GRAFO DE CÓDIGO (Graphify MCP) ---" in prompt
     assert prompt.index("INICIO DEL CONTEXTO") < prompt.index("INICIO DEL GRAFO")
     assert prompt.index("INICIO DEL GRAFO") < prompt.index("INICIO DE LA ESPECIFICACIÓN")
+
+
+def test_claude_code_executor_uses_subprocess_instead_of_litellm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path)
+    runner = _runner(tmp_path, monkeypatch, StringIO())
+    completed = SimpleNamespace(returncode=0, stdout="verdict: rejected", stderr="")
+
+    with (
+        patch("poseidon.delegator.shutil.which", return_value="claude"),
+        patch("poseidon.delegator.subprocess.run", return_value=completed) as run,
+        patch("poseidon.core.litellm.completion") as completion,
+    ):
+        result = runner.run("1b", str(spec_file), executor="claude-code")
+
+    assert result == "verdict: rejected"
+    run.assert_called_once()
+    assert run.call_args.args[0] == ["claude", "-p", "--output-format", "text"]
+    assert "Instrucciones inmutables de la fase" in run.call_args.kwargs["input"]
+    assert "Contenido de prueba" in run.call_args.kwargs["input"]
+    assert run.call_args.kwargs["timeout"] == 300.0
+    completion.assert_not_called()
