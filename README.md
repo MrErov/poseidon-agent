@@ -69,10 +69,10 @@ poseidon run --phase 0 --executor opencode
 | Executor | Invocación |
 |----------|------------|
 | `claude-code` | `claude -p --output-format text`, con el prompt por stdin |
-| `codex` | `codex exec <prompt>` |
-| `opencode` | `opencode run <prompt>` |
+| `codex` | `codex exec -`, con el prompt por stdin |
+| `opencode` | `opencode run -`, con el prompt por stdin |
 
-Cada delegación recibe un prompt nuevo, incluida la ejecución aislada de Goldfish. Los subprocesos tienen un timeout de 300 segundos, no usan shell y lanzan un error controlado si el ejecutable no está disponible, exceden el tiempo o terminan con código distinto de cero.
+Cada delegación recibe un prompt nuevo, incluida la ejecución aislada de Goldfish. Los tres ejecutores reciben el prompt mediante `stdin`, nunca como argumento posicional, para evitar los límites de longitud de la línea de comandos del sistema operativo. Los subprocesos tienen un timeout de 300 segundos, no usan shell y lanzan un error controlado si el ejecutable no está disponible, exceden el tiempo o terminan con código distinto de cero.
 
 Si el ejecutable no está en `PATH`, puedes indicar su ruta con `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` o `POSEIDON_OPENCODE_BIN`.
 

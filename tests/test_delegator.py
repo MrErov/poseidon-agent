@@ -10,19 +10,22 @@ from poseidon.delegator import DelegationError, LocalCLIDelegator
 @pytest.mark.parametrize(
     ("cli_type", "expected_command"),
     [
-        ("codex", ["codex", "exec", "prompt de prueba"]),
-        ("opencode", ["opencode", "run", "prompt de prueba"]),
+        ("codex", ["codex", "exec", "-"]),
+        ("opencode", ["opencode", "run", "-"]),
     ],
 )
-def test_delegator_builds_argument_commands(cli_type: str, expected_command: list[str]) -> None:
+def test_delegator_passes_prompt_via_stdin(cli_type: str, expected_command: list[str]) -> None:
     delegator = LocalCLIDelegator(executables={cli_type: expected_command[0]})
     completed = SimpleNamespace(returncode=0, stdout="resultado", stderr="")
 
     with patch("poseidon.delegator.subprocess.run", return_value=completed) as run:
         assert delegator.execute("prompt de prueba", cli_type) == "resultado"
 
-    assert run.call_args.args[0] == expected_command
-    assert run.call_args.kwargs["stdin"] == subprocess.DEVNULL
+    command = run.call_args.args[0]
+    assert command == expected_command
+    assert "prompt de prueba" not in command
+    assert run.call_args.kwargs["input"] == "prompt de prueba"
+    assert "stdin" not in run.call_args.kwargs
     assert run.call_args.kwargs["shell"] is False
 
 

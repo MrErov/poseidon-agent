@@ -52,9 +52,9 @@ class LocalCLIDelegator:
         if normalized_cli == "claude-code":
             command = [executable, "-p", "--output-format", "text"]
         elif normalized_cli == "codex":
-            command = [executable, "exec", prompt]
+            command = [executable, "exec", "-"]
         else:
-            command = [executable, "run", prompt]
+            command = [executable, "run", "-"]
 
         run_options: dict[str, object] = {
             "capture_output": True,
@@ -64,11 +64,8 @@ class LocalCLIDelegator:
             "timeout": self.timeout_seconds,
             "check": False,
             "shell": False,
+            "input": prompt,
         }
-        if normalized_cli == "claude-code":
-            run_options["input"] = prompt
-        else:
-            run_options["stdin"] = subprocess.DEVNULL
 
         try:
             completed = subprocess.run(command, **run_options)
