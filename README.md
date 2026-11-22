@@ -90,7 +90,9 @@ Las fases que producen Markdown se guardan en `specs/` (relativo al proyecto don
 |------|------------------|
 | `1a` | `specs/<nombre>.spec.md` |
 | `1b` o `goldfish` | `specs/<nombre>.audit.<N>.md` (el siguiente número libre) |
-| `2` o superior | Solo consola; la salida estructurada se gestionará en una versión futura |
+| `2` o `tdd` | Solo consola |
+| `3` u `odd` | `specs/<nombre>.observation.md` |
+| `4` o `drift` | `specs/<nombre>.drift.<N>.md` (la siguiente ronda libre) |
 
 El nombre se deriva del `--spec` (o del `--context` si no hay spec), eliminando la extensión `.md` o `.spec.md`. Al guardar, Poseidón muestra `✅ Guardado en specs/...` en verde. Un fallo de escritura se reporta como error controlado con código de salida `1`.
 
@@ -102,6 +104,10 @@ Después de una auditoría `1b` o `goldfish`, Poseidón busca `verdict` o `effec
 - `rejected` o veredicto ausente: no modifica el spec y muestra `⚠️ Auditoría rechazada. El spec sigue en draft.`
 
 La actualización se limita al frontmatter inicial: `us_id`, `created_at` y el resto de campos y del cuerpo Markdown se conservan intactos.
+
+En la Fase 3 (`odd`), Poseidón guarda la observación y, si el reporte declara `verdict: approved`, `effective_verdict: approved` o `status: observed`, actualiza el spec a `status: observed`.
+
+En la Fase 4 (`drift`), `no-drift` y `drifted-accepted` actualizan el spec a `status: certified` y registran `drift_report`. Un veredicto `drifted` conserva el spec intacto y muestra `❌ Drift rechazado. El spec no puede ser certificado`. Si `effective_verdict` está presente, prevalece sobre `verdict`.
 
 ### Gatekeeper TDD
 

@@ -479,3 +479,86 @@ def test_claude_code_executor_uses_subprocess_instead_of_litellm(
     assert "Contenido de prueba" in run.call_args.kwargs["input"]
     assert run.call_args.kwargs["timeout"] == 300.0
     completion.assert_not_called()
+
+
+def test_odd_phase_saves_observation_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="3")
+    spec_file.write_text("---\nstatus: approved\n---\n# Spec", encoding="utf-8")
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    with patch(
+        "poseidon.core.litellm.completion", return_value=_response("# Observación runtime")
+    ):
+        runner.run("3", str(spec_file), "modelo")
+
+    observation = tmp_path / "specs" / "spec.observation.md"
+    assert observation.is_file()
+    assert observation.read_text(encoding="utf-8") == "# Observación runtime"
+    assert "Observación ODD guardada" in output.getvalue()
+
+
+def test_odd_approved_report_updates_spec_to_observed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="odd")
+    spec_file.write_text("---\nstatus: approved\n---\n# Spec", encoding="utf-8")
+    runner = _runner(tmp_path, monkeypatch, StringIO())
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response("effective_verdict: approved"),
+    ):
+        runner.run("odd", str(spec_file), "modelo")
+
+    assert "status: observed" in spec_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("verdict", ["no-drift", "drifted-accepted"])
+def test_drift_certifies_spec_and_increments_round(
+    verdict: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="4")
+    spec_file.write_text(
+        "---\nstatus: observed\ndrift_report: pending\n---\n# Spec",
+        encoding="utf-8",
+    )
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    (specs_dir / "spec.drift.1.md").write_text("Ronda anterior", encoding="utf-8")
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response(f"effective_verdict: {verdict}"),
+    ):
+        runner.run("drift", str(spec_file), "modelo")
+
+    report = specs_dir / "spec.drift.2.md"
+    assert report.is_file()
+    updated = spec_file.read_text(encoding="utf-8")
+    assert "status: certified" in updated
+    assert "drift_report: specs/spec.drift.2.md" in updated
+    assert "✅ Drift certificado. Spec actualizado a status: certified" in output.getvalue()
+
+
+def test_drifted_verdict_keeps_spec_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="drift")
+    original = "---\nstatus: observed\ndrift_report: pending\n---\n# Spec"
+    spec_file.write_text(original, encoding="utf-8")
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response("verdict: drifted"),
+    ):
+        runner.run("4", str(spec_file), "modelo")
+
+    assert spec_file.read_text(encoding="utf-8") == original
+    assert "❌ Drift rechazado. El spec no puede ser certificado" in output.getvalue()

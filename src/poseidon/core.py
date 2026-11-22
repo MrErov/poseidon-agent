@@ -49,6 +49,16 @@ _VERDICT_PATTERN = re.compile(
     r"['\"]?(?P<verdict>audited|rejected)\b",
     re.IGNORECASE,
 )
+_DRIFT_VERDICT_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<key>effective_verdict|verdict)[ \t]*:[ \t]*"
+    r"['\"]?(?P<verdict>no-drift|drifted-accepted|drifted)\b",
+    re.IGNORECASE,
+)
+_OBSERVATION_VERDICT_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<key>effective_verdict|verdict|status)[ \t]*:[ \t]*"
+    r"['\"]?(?P<verdict>approved|observed)\b",
+    re.IGNORECASE,
+)
 
 
 class PoseidonError(Exception):
@@ -175,8 +185,8 @@ class PhaseRunner:
         artifact_path = self._save_artifact(
             phase_kind, content, spec_file, context_file
         )
-        if phase_kind == "goldfish":
-            self._update_spec_metadata(spec_file, content, artifact_path)
+        if phase_kind in {"goldfish", "odd", "drift"}:
+            self._update_spec_metadata(spec_file, content, artifact_path, phase_kind)
 
         return content
 
@@ -272,7 +282,7 @@ class PhaseRunner:
         Las fases TDD (2 o superior) producen salidas estructuradas, no un
         Markdown, por lo que todavía no generan archivo.
         """
-        if phase_kind not in {"spec", "goldfish"}:
+        if phase_kind not in {"spec", "goldfish", "odd", "drift"}:
             return None
 
         spec_name = self._spec_name(spec_path, context_path)
@@ -288,30 +298,81 @@ class PhaseRunner:
         if phase_kind == "spec":
             return specs_dir / f"{spec_name}.spec.md"
 
-        audit_number = self._next_audit_number(specs_dir, spec_name)
-        return specs_dir / f"{spec_name}.audit.{audit_number}.md"
+        if phase_kind == "goldfish":
+            audit_number = self._next_audit_number(specs_dir, spec_name)
+            return specs_dir / f"{spec_name}.audit.{audit_number}.md"
+
+        if phase_kind == "odd":
+            return specs_dir / f"{spec_name}.observation.md"
+
+        drift_number = self._next_drift_number(specs_dir, spec_name)
+        return specs_dir / f"{spec_name}.drift.{drift_number}.md"
 
     def _update_spec_metadata(
         self,
         spec_path: Path | None,
-        audit_content: str,
-        audit_path: Path | None,
+        report_content: str,
+        report_path: Path | None,
+        phase_kind: str = "goldfish",
     ) -> None:
-        """Sincroniza el frontmatter del spec con el veredicto del Goldfish."""
+        """Sincroniza el spec con los veredictos Goldfish, ODD y Drift."""
         if spec_path is None:
             return
 
-        if self._extract_verdict(audit_content) != "audited":
-            self.console.print(
-                "⚠️ Auditoría rechazada. El spec sigue en draft.",
-                style="yellow",
-                markup=False,
+        if phase_kind == "goldfish":
+            if self._extract_verdict(report_content) != "audited":
+                self.console.print(
+                    "⚠️ Auditoría rechazada. El spec sigue en draft.",
+                    style="yellow",
+                    markup=False,
+                )
+                return
+            target_status = "audited"
+            report_field = "goldfish_audit"
+            only_if = "draft"
+            success_message = "✅ Spec actualizado a status: audited"
+        elif phase_kind == "odd":
+            verdict = self._extract_observation_verdict(report_content)
+            if verdict not in {"approved", "observed"}:
+                self.console.print(
+                    "✅ Observación ODD guardada",
+                    style="green",
+                    markup=False,
+                )
+                return
+            target_status = "observed"
+            report_field = None
+            only_if = None
+            success_message = "✅ Spec actualizado a status: observed"
+        elif phase_kind == "drift":
+            verdict = self._extract_drift_verdict(report_content)
+            if verdict == "drifted":
+                self.console.print(
+                    "❌ Drift rechazado. El spec no puede ser certificado",
+                    style="red",
+                    markup=False,
+                )
+                return
+            if verdict not in {"no-drift", "drifted-accepted"}:
+                self.console.print(
+                    "⚠️ No se encontró un veredicto Drift certificable; "
+                    "el spec no cambió.",
+                    style="yellow",
+                    markup=False,
+                )
+                return
+            target_status = "certified"
+            report_field = "drift_report"
+            only_if = None
+            success_message = "✅ Drift certificado. Spec actualizado a status: certified"
+        else:
+            raise InputValidationError(
+                f"Tipo de fase no soportado para actualizar metadatos: {phase_kind}"
             )
-            return
 
-        if audit_path is None:
+        if report_path is None:
             self.console.print(
-                "⚠️ No se pudo registrar la auditoría en el spec.",
+                "⚠️ No se pudo registrar el reporte en el spec.",
                 style="yellow",
                 markup=False,
             )
@@ -331,14 +392,15 @@ class PhaseRunner:
         updated = self._set_frontmatter_field(
             specification,
             "status",
-            "audited",
-            only_if="draft",
+            target_status,
+            only_if=only_if,
         )
-        updated = self._set_frontmatter_field(
-            updated,
-            "goldfish_audit",
-            self._display_path(audit_path),
-        )
+        if report_field is not None:
+            updated = self._set_frontmatter_field(
+                updated,
+                report_field,
+                self._display_path(report_path),
+            )
 
         try:
             spec_path.write_text(updated, encoding="utf-8")
@@ -347,11 +409,7 @@ class PhaseRunner:
                 f"No se pudo actualizar el spec {spec_path}: {exc}"
             ) from exc
 
-        self.console.print(
-            "✅ Spec actualizado a status: audited",
-            style="green",
-            markup=False,
-        )
+        self.console.print(success_message, style="green", markup=False)
 
     @staticmethod
     def _extract_verdict(audit_content: str) -> str | None:
@@ -361,6 +419,26 @@ class PhaseRunner:
             verdicts[match.group("key").lower()] = match.group("verdict").lower()
 
         return verdicts.get("effective_verdict") or verdicts.get("verdict")
+
+    @staticmethod
+    def _extract_drift_verdict(report_content: str) -> str | None:
+        """Extrae el veredicto Drift, dando prioridad a effective_verdict."""
+        verdicts: dict[str, str] = {}
+        for match in _DRIFT_VERDICT_PATTERN.finditer(report_content):
+            verdicts[match.group("key").lower()] = match.group("verdict").lower()
+        return verdicts.get("effective_verdict") or verdicts.get("verdict")
+
+    @staticmethod
+    def _extract_observation_verdict(report_content: str) -> str | None:
+        """Extrae una aprobación ODD explícita sin inferirla del contexto."""
+        verdicts: dict[str, str] = {}
+        for match in _OBSERVATION_VERDICT_PATTERN.finditer(report_content):
+            verdicts[match.group("key").lower()] = match.group("verdict").lower()
+        return (
+            verdicts.get("effective_verdict")
+            or verdicts.get("verdict")
+            or verdicts.get("status")
+        )
 
     @classmethod
     def _set_frontmatter_field(
@@ -443,11 +521,23 @@ class PhaseRunner:
     @staticmethod
     def _next_audit_number(specs_dir: Path, spec_name: str) -> int:
         """Devuelve el siguiente número de auditoría disponible para un spec."""
+        return PhaseRunner._next_artifact_number(specs_dir, spec_name, "audit")
+
+    @staticmethod
+    def _next_drift_number(specs_dir: Path, spec_name: str) -> int:
+        """Devuelve la siguiente ronda Drift disponible para un spec."""
+        return PhaseRunner._next_artifact_number(specs_dir, spec_name, "drift")
+
+    @staticmethod
+    def _next_artifact_number(
+        specs_dir: Path, spec_name: str, artifact_kind: str
+    ) -> int:
+        """Calcula una ronda sin reutilizar números de artefactos anteriores."""
         if not specs_dir.is_dir():
             return 1
 
-        audit_pattern = re.compile(
-            rf"^{re.escape(spec_name)}\.audit\.(\d+)\.md$",
+        artifact_pattern = re.compile(
+            rf"^{re.escape(spec_name)}\.{re.escape(artifact_kind)}\.(\d+)\.md$",
             re.IGNORECASE,
         )
         try:
@@ -460,7 +550,7 @@ class PhaseRunner:
         numbers = [
             int(match.group(1))
             for path in entries
-            if path.is_file() and (match := audit_pattern.match(path.name))
+            if path.is_file() and (match := artifact_pattern.match(path.name))
         ]
         return max(numbers, default=0) + 1
 
