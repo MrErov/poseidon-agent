@@ -63,7 +63,7 @@ graph TD
 - **Cold Memory:** instructions resolved from `.meta-skills/` using a phase alias or an exact filename; phases belong to the target project, not to Poseidón.
 - **Hot Memory:** a new message list for every call, with no previous history.
 - **Context:** the content of `--context` is injected before `--spec` into Hot Memory.
-- **Goldfish Audit:** any phase resolved as `02-egm-goldfish-audit` displays `Aislando Memoria para Goldfish` and runs without history.
+- **Goldfish Audit:** any phase resolved as `02-egm-goldfish-audit` displays its memory-isolation warning and runs without history.
 
 ## Phase Aliases
 
