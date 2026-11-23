@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="docs/assets/logo.png" alt="Poseidón Agent logo" width="220" />
-  <h1>🔱 Poseidón Agent</h1>
+  <img src="docs/assets/logo.png" alt="Poseidon Agent logo with trident" width="200">
+  <h1>🔱 Poseidon Agent</h1>
   <p><strong>The deterministic execution engine for Keel Nav.</strong></p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/tag/v1.0.0-alpha">
