@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/logo.png" alt="Logo de Poseidón Agent" width="220" />
+  <img src="docs/assets/logo.png" alt="Poseidón Agent logo" width="220" />
   <h1>🔱 Poseidón Agent</h1>
   <p><strong>The deterministic execution engine for Keel Nav.</strong></p>
   <p>
@@ -15,61 +15,60 @@
   </p>
 </div>
 
-Poseidón es el motor de ejecución determinista de **Keel Nav**. Orquesta fases descritas en Markdown, inyecta una especificación y delega la inferencia en LiteLLM. **No es un agente autónomo**: no mantiene conversaciones ni conserva estado entre ejecuciones.
+Poseidón is the deterministic execution engine for **Keel Nav**. It orchestrates phases defined in Markdown, injects specifications, and delegates inference to LiteLLM or local CLIs. **It is not an autonomous agent**: it does not retain conversations or preserve state between executions.
 
 ## Why Poseidón?
 
-Frente a herramientas autónomas como **Hermes-Agent**, Poseidón no decide su propio rumbo ni improvisa pasos. Es un orquestador que ejecuta exactamente el protocolo Keel Nav y hace explícitas sus restricciones:
+Unlike autonomous tools such as **Hermes-Agent**, Poseidón does not choose its own course or improvise steps. It executes the Keel Nav protocol exactly and makes its constraints explicit:
 
-- **Memory Flush:** cada fase recibe mensajes nuevos; Goldfish siempre se ejecuta con Memoria Caliente vacía.
-- **Gatekeeper:** bloquea la Fase 2 si el spec no alcanzó `audited` o `approved`.
-- **State Machine:** solo los veredictos válidos permiten transiciones como `draft → audited → observed → certified`.
-- **Ejecución determinista:** carga la Memoria Fría del proyecto objetivo, usa `temperature=0.0` en la API y conserva los artefactos y veredictos como evidencia.
+- **Memory Flush:** every phase receives fresh messages; Goldfish always runs with empty Hot Memory.
+- **Gatekeeper:** Phase 2 is blocked unless the spec has reached `audited` or `approved`.
+- **State Machine:** only valid verdicts enable transitions such as `draft -> audited -> observed -> certified`.
+- **Deterministic execution:** Cold Memory is loaded from the target project, API calls use `temperature=0.0`, and artifacts and verdicts are preserved as evidence.
 
-Poseidón no sustituye al Navigator ni a las reglas de Keel Nav: las hace ejecutables y verificables.
+Poseidón does not replace the Navigator or the Keel Nav rules: it makes them executable and verifiable.
 
 ## Ecosystem
 
-| Componente | Responsabilidad |
-|------------|-----------------|
-| **Keel Nav** | Define las fases, plantillas, compuertas y convenciones que forman la Memoria Fría. |
-| **Poseidón Agent** | Resuelve fases, aísla memoria, delega inferencia, guarda artefactos y aplica la máquina de estados. |
-| **Plugin de DeepSeek** | Proporciona el punto de contacto e invocación desde la experiencia DeepSeek; no sustituye al motor ni implica usar la API de DeepSeek. |
-| **NVIDIA NIM o CLIs locales** | Ejecutan la inferencia a través de LiteLLM o de Claude Code, Codex y OpenCode. |
-| **Graphify MCP** | Añade opcionalmente contexto dinámico del grafo de código a las fases 1a y 1b. |
+| Component | Responsibility |
+|-----------|----------------|
+| **Keel Nav** | Defines the phases, templates, gates, and conventions that make up Cold Memory. |
+| **Poseidón Agent** | Resolves phases, isolates memory, delegates inference, saves artifacts, and enforces the state machine. |
+| **DeepSeek plugin** | Provides invocation within the DeepSeek experience; it neither replaces the engine nor implies use of the DeepSeek API. |
+| **NVIDIA NIM or local CLIs** | Execute inference through LiteLLM or Claude Code, Codex, and OpenCode. |
+| **Graphify MCP** | Optionally injects dynamic code-graph context into Phases 1a and 1b. |
 
-Keel Nav aporta el protocolo, Poseidón lo ejecuta y el plugin de DeepSeek facilita su uso dentro del ecosistema, manteniendo cada responsabilidad separada.
+Keel Nav provides the protocol, Poseidón executes it, and the DeepSeek plugin makes it accessible while keeping each responsibility separate.
 
-
-## Arquitectura
+## Architecture
 
 ```mermaid
 graph TD
     CLI[poseidon run --phase X] --> Runner[PhaseRunner]
     Runner --> StateMachine[State Machine / Gatekeeper]
-    StateMachine --> ColdMemory[Lee .meta-skills/ y specs/]
-    ColdMemory --> Decision{¿Executor?}
+    StateMachine --> ColdMemory[Read .meta-skills/ and specs/]
+    ColdMemory --> Decision{Executor?}
     Decision -- API --> LiteLLM[LiteLLM / NVIDIA NIM]
-    Decision -- CLI Local --> Subprocess[Claude Code / Codex / OpenCode]
-    LiteLLM --> Result[Respuesta del LLM]
+    Decision -- Local CLI --> Subprocess[Claude Code / Codex / OpenCode]
+    LiteLLM --> Result[LLM response]
     Subprocess --> Result
-    Result --> AutoSave[Auto-Save de Artefactos]
-    Result --> SpecUpdate[Actualizar status: del Spec]
-    AutoSave --> Done[Éxito]
+    Result --> AutoSave[Artifact Auto-Save]
+    Result --> SpecUpdate[Update Spec status]
+    AutoSave --> Done[Success]
     SpecUpdate --> Done
 ```
 
-## Modelo de memoria
+## Memory Model
 
-- **Memoria Fría:** instrucciones resueltas desde `.meta-skills/` mediante alias de fase o nombre exacto del archivo; las fases pertenecen al proyecto objetivo, no a Poseidón.
-- **Memoria Caliente:** una lista de mensajes nueva por llamada, sin historial previo.
-- **Contexto:** el contenido de `--context` se inyecta antes del `--spec` en la Memoria Caliente.
-- **Goldfish Audit:** cualquier fase resuelta como `02-egm-goldfish-audit` muestra `Aislando Memoria para Goldfish` y se ejecuta sin historial.
+- **Cold Memory:** instructions resolved from `.meta-skills/` using a phase alias or an exact filename; phases belong to the target project, not to Poseidón.
+- **Hot Memory:** a new message list for every call, with no previous history.
+- **Context:** the content of `--context` is injected before `--spec` into Hot Memory.
+- **Goldfish Audit:** any phase resolved as `02-egm-goldfish-audit` displays `Aislando Memoria para Goldfish` and runs without history.
 
-## Alias de fases
+## Phase Aliases
 
-| Alias | Archivo en `.meta-skills/` |
-|-------|----------------------------|
+| Alias | File in `.meta-skills/` |
+|-------|--------------------------|
 | `0`, `00`, `context` | `00-context-bootstrap.md` |
 | `1a`, `spec` | `01-sdd-spec-writer.md` |
 | `1b`, `goldfish` | `02-egm-goldfish-audit.md` |
@@ -77,45 +76,45 @@ graph TD
 | `3`, `odd` | `04-odd-vertical-slice.md` |
 | `4`, `drift` | `05-drift-control.md` |
 
-También puedes pasar el nombre exacto del archivo, con o sin `.md`. Si la fase no coincide con un alias, Poseidón busca un `.md` cuyo nombre empiece por la fase o la contenga; si no encuentra ninguno, termina con un error controlado. Esta resolución se usa tanto para cargar la Memoria Fría como para decidir el guardado de artefactos y la actualización del spec.
+You can also provide the exact filename, with or without `.md`. If the phase does not match an alias, Poseidón searches for a Markdown file whose name starts with or contains the phase. If no match is found, it stops with a controlled error. The same resolution is used to load Cold Memory, save artifacts, and update the spec.
 
-## Requisitos e instalación
+## Requirements and Installation
 
-Necesitas Python 3.10 o superior y [uv](https://docs.astral.sh/uv/).
+You need Python 3.10 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv venv
 # Linux/macOS:
 source .venv/bin/activate
 # Windows PowerShell:
-# .venv\Scripts\Activate.ps1
+# .venv/Scripts/Activate.ps1
 uv pip install -e .
 ```
 
-Crea un archivo `.env` con las credenciales del proveedor que vayas a usar. Por ejemplo:
+Create a `.env` file with your NVIDIA NIM credential. Graphify MCP is optional:
 
 ```dotenv
 NVIDIA_NIM_API_KEY=...
 
-# Opcional: activa Graphify MCP para las fases 1a y 1b.
+# Optional: enable Graphify MCP for Phases 1a and 1b.
 GRAPHIFY_MCP_URL=https://api.graphify.com/mcp
 ```
 
-## Uso
+## Usage
 
-Ejecuta Poseidón desde la raíz del proyecto que contiene `.meta-skills/`. El argumento `--spec` es opcional para fases como Context Bootstrap y 1a:
+Run Poseidón from the root of the project that contains `.meta-skills/`. The `--spec` argument is optional for phases such as Context Bootstrap and Phase 1a:
 
 ```bash
-poseidon run --phase 00-context-bootstrap --model nvidia_nim/<modelo-disponible>
-poseidon run --phase 1a --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<modelo-disponible>
-poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<modelo-disponible>
+poseidon run --phase 00-context-bootstrap --model nvidia_nim/<available-model>
+poseidon run --phase 1a --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<available-model>
+poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<available-model>
 ```
 
-Sustituye `<modelo-disponible>` por el identificador del modelo que tengas habilitado en NVIDIA NIM. Las credenciales se cargan automáticamente desde `.env`.
+Replace `<available-model>` with the identifier of a model enabled in your NVIDIA NIM account. Credentials are loaded automatically from `.env`.
 
-### Ejecutores locales (Delegation Engine)
+### Local Executors (Delegation Engine)
 
-Con `--executor api` (valor predeterminado), Poseidón usa LiteLLM y `--model` es obligatorio. También puedes delegar el prompt a un CLI local ya instalado y autenticado; en ese caso `--model` se omite y la herramienta usa su propia configuración:
+With `--executor api` (the default), Poseidón uses LiteLLM and `--model` is required. You can also delegate the prompt to an installed and authenticated local CLI; in that case, `--model` is omitted and the tool uses its own configuration:
 
 ```bash
 poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --executor claude-code
@@ -123,56 +122,56 @@ poseidon run --phase 2 --spec specs/US-001.md --executor codex
 poseidon run --phase 0 --executor opencode
 ```
 
-| Executor | Invocación |
+| Executor | Invocation |
 |----------|------------|
-| `claude-code` | `claude -p --output-format text`, con el prompt por stdin |
-| `codex` | `codex exec -`, con el prompt por stdin |
-| `opencode` | `opencode run -`, con el prompt por stdin |
+| `claude-code` | `claude -p --output-format text`, with the prompt passed through stdin |
+| `codex` | `codex exec -`, with the prompt passed through stdin |
+| `opencode` | `opencode run -`, with the prompt passed through stdin |
 
-Cada delegación recibe un prompt nuevo, incluida la ejecución aislada de Goldfish. Los tres ejecutores reciben el prompt mediante `stdin`, nunca como argumento posicional, para evitar los límites de longitud de la línea de comandos del sistema operativo. Los subprocesos tienen un timeout de 300 segundos, no usan shell y lanzan un error controlado si el ejecutable no está disponible, exceden el tiempo o terminan con código distinto de cero.
+Every delegation receives a fresh prompt, including isolated Goldfish execution. All three executors receive the prompt through `stdin`, never as a positional argument, to avoid operating-system command-line length limits. Subprocesses have a 300-second timeout, do not use a shell, and raise a controlled error if the executable is unavailable, times out, or returns a non-zero exit code.
 
-Si el ejecutable no está en `PATH`, puedes indicar su ruta con `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` o `POSEIDON_OPENCODE_BIN`.
+If an executable is not in `PATH`, set its path with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN`, or `POSEIDON_OPENCODE_BIN`.
 
-### Graphify MCP (opcional)
+### Graphify MCP (Optional)
 
-Define `GRAPHIFY_MCP_URL` para enriquecer las fases `1a` y `1b` con contexto del grafo de código. La URL predeterminada sugerida es `https://api.graphify.com/mcp`. Poseidón consulta usando la ruta de `--spec`, o la de `--context` si no hay spec, e inyecta la respuesta entre el contexto y la especificación.
+Set `GRAPHIFY_MCP_URL` to enrich Phases 1a and 1b with code-graph context. The suggested default URL is `https://api.graphify.com/mcp`. Poseidón queries using the `--spec` path, or the `--context` path when no spec is provided, and injects the response between the context and the specification.
 
-Si la variable no está configurada, está vacía, la petición falla o la respuesta no contiene texto aprovechable, Poseidón continúa sin contexto Graphify y sin interrumpir la ejecución.
+If the variable is missing or empty, the request fails, or the response contains no usable text, Poseidón continues without Graphify context and without interrupting execution.
 
-### Artefactos automáticos
+### Automatic Artifacts
 
-Las fases que producen Markdown se guardan en `specs/` (relativo al proyecto donde se invoca Poseidón):
+Phases that produce Markdown save their artifacts under `specs/`, relative to the project where Poseidón is invoked:
 
-| Fase | Archivo generado |
-|------|------------------|
-| `1a` | `specs/<nombre>.spec.md` |
-| `1b` o `goldfish` | `specs/<nombre>.audit.<N>.md` (el siguiente número libre) |
-| `2` o `tdd` | Solo consola |
-| `3` u `odd` | `specs/<nombre>.observation.md` |
-| `4` o `drift` | `specs/<nombre>.drift.<N>.md` (la siguiente ronda libre) |
+| Phase | Generated file |
+|-------|----------------|
+| `1a` | `specs/<name>.spec.md` |
+| `1b` or `goldfish` | `specs/<name>.audit.<N>.md` (next available audit number) |
+| `2` or `tdd` | Console only |
+| `3` or `odd` | `specs/<name>.observation.md` |
+| `4` or `drift` | `specs/<name>.drift.<N>.md` (next available drift round) |
 
-El nombre se deriva del `--spec` (o del `--context` si no hay spec), eliminando la extensión `.md` o `.spec.md`. Al guardar, Poseidón muestra `✅ Guardado en specs/...` en verde. Un fallo de escritura se reporta como error controlado con código de salida `1`.
+The name is derived from `--spec`, or from `--context` when no spec is provided, by removing the `.md` or `.spec.md` extension. Successful saves are shown in green. Write failures are reported as controlled errors with exit code `1`.
 
-### Máquina de estados del spec
+### Spec State Machine
 
-Después de una auditoría `1b` o `goldfish`, Poseidón busca `verdict` o `effective_verdict` en el reporte generado:
+After a `1b` or `goldfish` audit, Poseidón searches for `verdict` or `effective_verdict` in the generated report:
 
-- `audited`: actualiza únicamente el frontmatter del spec (`status: draft` → `status: audited` y `goldfish_audit: pending` → `specs/<nombre>.audit.<N>.md`) y muestra `✅ Spec actualizado a status: audited`.
-- `rejected` o veredicto ausente: no modifica el spec y muestra `⚠️ Auditoría rechazada. El spec sigue en draft.`
+- `audited`: updates only the spec frontmatter, changing `status: draft` to `status: audited` and `goldfish_audit: pending` to the generated audit path.
+- `rejected` or a missing verdict: leaves the spec unchanged in `draft`.
 
-La actualización se limita al frontmatter inicial: `us_id`, `created_at` y el resto de campos y del cuerpo Markdown se conservan intactos.
+Updates are limited to the initial frontmatter. Fields such as `us_id` and `created_at`, along with the Markdown body, are preserved.
 
-En la Fase 3 (`odd`), Poseidón guarda la observación y, si el reporte declara `verdict: approved`, `effective_verdict: approved` o `status: observed`, actualiza el spec a `status: observed`.
+In Phase 3 (`odd`), Poseidón saves the observation and updates the spec to `status: observed` when the report explicitly declares `verdict: approved`, `effective_verdict: approved`, or `status: observed`.
 
-En la Fase 4 (`drift`), `no-drift` y `drifted-accepted` actualizan el spec a `status: certified` y registran `drift_report`. Un veredicto `drifted` conserva el spec intacto y muestra `❌ Drift rechazado. El spec no puede ser certificado`. Si `effective_verdict` está presente, prevalece sobre `verdict`.
+In Phase 4 (`drift`), `no-drift` and `drifted-accepted` update the spec to `status: certified` and register `drift_report`. A `drifted` verdict leaves the spec untouched and prints a red rejection message. When present, `effective_verdict` takes precedence over `verdict`.
 
-### Gatekeeper TDD
+### TDD Gatekeeper
 
-La fase `2` y cualquier fase que contenga `tdd` exigen un spec cuyo frontmatter tenga `status: audited` o `status: approved`. Un estado como `draft`, un status ausente o la falta del spec bloquean la ejecución antes de llamar al LLM.
+Phase `2` and any phase containing `tdd` require a spec whose frontmatter contains `status: audited` or `status: approved`. A status such as `draft`, a missing status, or a missing spec blocks execution before any LLM call.
 
-Si una fase requerida o una especificación proporcionada no existe, Poseidón termina con código `1` y muestra un error en rojo.
+If a required phase file or a supplied specification does not exist, Poseidón exits with code `1` and prints a controlled error in red.
 
-## Desarrollo
+## Development
 
 ```bash
 uv pip install -e ".[dev]"
@@ -180,13 +179,13 @@ uv run pytest
 uv run ruff check .
 ```
 
-Estructura principal:
+Project structure:
 
 ```text
 src/poseidon/
-├── core.py        # PhaseRunner, memoria y selección de ejecutor
-├── delegator.py   # Delegación a CLIs locales con subprocesos
-├── main.py        # CLI de Typer y manejo de errores
-├── mcp_client.py  # Integración opcional con Graphify MCP
+├── core.py        # PhaseRunner, memory, and executor selection
+├── delegator.py   # Local CLI delegation through subprocesses
+├── main.py        # Typer CLI and error handling
+├── mcp_client.py  # Optional Graphify MCP integration
 └── __init__.py
 ```
