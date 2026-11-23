@@ -1,7 +1,7 @@
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from rich.console import Console
@@ -562,3 +562,33 @@ def test_drifted_verdict_keeps_spec_unchanged(
 
     assert spec_file.read_text(encoding="utf-8") == original
     assert "❌ Drift rechazado. El spec no puede ser certificado" in output.getvalue()
+
+
+def test_herdr_executor_uses_persistent_delegator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path)
+    herdr = Mock()
+    herdr.execute.return_value = "verdict: rejected"
+    monkeypatch.chdir(tmp_path)
+    runner = PhaseRunner(
+        console=_console(StringIO()),
+        herdr_delegator=herdr,
+    )
+
+    with (
+        patch("poseidon.core.litellm.completion") as completion,
+        patch.object(runner.delegator, "execute") as local_execute,
+    ):
+        result = runner.run(
+            "1b",
+            str(spec_file),
+            executor="herdr",
+            herdr_agent="codex",
+        )
+
+    assert result == "verdict: rejected"
+    assert herdr.execute.call_args.args[1] == "codex"
+    assert "Contenido de prueba" in herdr.execute.call_args.args[0]
+    local_execute.assert_not_called()
+    completion.assert_not_called()

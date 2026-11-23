@@ -10,7 +10,7 @@
       <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests: 47 passed" src="https://img.shields.io/badge/tests-47%20passed-brightgreen.svg" />
+      <img alt="Tests: 61 passed" src="https://img.shields.io/badge/tests-61%20passed-brightgreen.svg" />
     </a>
   </p>
 </div>
@@ -50,8 +50,10 @@ graph TD
     ColdMemory --> Decision{Executor?}
     Decision -- API --> LiteLLM[LiteLLM / NVIDIA NIM]
     Decision -- Local CLI --> Subprocess[Claude Code / Codex / OpenCode]
+    Decision -- Herdr --> HerdrCore[herdr-core persistent terminal]
     LiteLLM --> Result[LLM response]
     Subprocess --> Result
+    HerdrCore --> Result
     Result --> AutoSave[Artifact Auto-Save]
     Result --> SpecUpdate[Update Spec status]
     AutoSave --> Done[Success]
@@ -132,6 +134,56 @@ Every delegation receives a fresh prompt, including isolated Goldfish execution.
 
 If an executable is not in `PATH`, set its path with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN`, or `POSEIDON_OPENCODE_BIN`.
 
+### Agent Roles & Herdr Integration
+
+Poseidón 2.0 introduces role-based execution through an optional `config.yaml`. Roles select the executor and model for each phase, while Herdr keeps supported agents alive in persistent terminals managed by `herdr-core`.
+
+```yaml
+version: 2
+roles:
+  architect:
+    executor: api
+    model: nvidia_nim/moonshotai/kimi-k2-instruct
+  tester:
+    executor: claude-code
+    model: null
+    runtime: herdr
+    name_prefix: poseidon-tester
+phase_roles:
+  0: architect
+  1a: architect
+  1b: tester
+  2: tester
+  3: tester
+  4: architect
+herdr:
+  executable: hc
+  wait_timeout_seconds: 180
+  read_lines: 1000
+  keep: true
+  outlive_parent: true
+  fallback_to_subprocess: false
+```
+
+Resolution follows this precedence: explicit CLI role, executor, or model; role settings; `phase_roles`; then API defaults. A role with `runtime: herdr` uses Herdr, while its `executor` identifies the agent launched inside the persistent terminal.
+
+Install `herdr-core` using the [official instructions](https://herdr.dev/core/), then verify it with `hc server status`. On Windows, PowerShell users can run:
+
+```powershell
+powershell -c "irm https://releases.herdr.dev/core/install.ps1 | iex"
+```
+
+Run a configured role or select Herdr explicitly:
+
+```bash
+poseidon run --phase 1b --role tester
+poseidon run --phase 1b --executor herdr --herdr-agent codex
+```
+
+Poseidón uses JSON-RPC 2.0 over `hc connect` to call `terminal.run`, `terminal.send`, `terminal.wait`, and `terminal.read`. The full prompt travels as a JSON string rather than a command-line argument, preserving Goldfish isolation and avoiding OS command-line limits. Agents remain alive if Poseidón closes or a request times out; controlled errors include the terminal address for `hc attach`.
+
+Missing executables, connection failures, JSON-RPC errors, empty output, and timeouts produce controlled errors. There is no silent fallback to a non-persistent subprocess when `fallback_to_subprocess` is `false`.
+
 ### Graphify MCP (Optional)
 
 Set `GRAPHIFY_MCP_URL` to enrich Phases 1a and 1b with code-graph context. The suggested default URL is `https://api.graphify.com/mcp`. Poseidón queries using the `--spec` path, or the `--context` path when no spec is provided, and injects the response between the context and the specification.
@@ -183,9 +235,11 @@ Project structure:
 
 ```text
 src/poseidon/
-├── core.py        # PhaseRunner, memory, and executor selection
-├── delegator.py   # Local CLI delegation through subprocesses
-├── main.py        # Typer CLI and error handling
-├── mcp_client.py  # Optional Graphify MCP integration
+├── config_manager.py   # Role and phase executor resolution
+├── core.py             # PhaseRunner, memory, and executor selection
+├── delegator.py        # Local CLI delegation through subprocesses
+├── herdr_delegator.py  # Persistent agents through herdr-core JSON-RPC
+├── main.py             # Typer CLI and error handling
+├── mcp_client.py       # Optional Graphify MCP integration
 └── __init__.py
 ```

@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
 
@@ -157,4 +157,42 @@ def test_cli_api_executor_requires_model(tmp_path: Path, monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "--model es obligatorio" in result.output
+    completion.assert_not_called()
+
+
+def test_cli_role_selects_herdr(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "02-egm-goldfish-audit.md").write_text("Goldfish", encoding="utf-8")
+    spec = tmp_path / "spec.md"
+    spec.write_text("Spec under test", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text(
+        """version: 2
+roles:
+  tester:
+    executor: claude-code
+    model: null
+    runtime: herdr
+    name_prefix: poseidon-tester
+phase_roles:
+  1b: tester
+herdr:
+  executable: hc
+  wait_timeout_seconds: 180
+""",
+        encoding="utf-8",
+    )
+    herdr = Mock()
+    herdr.execute.return_value = "verdict: rejected"
+
+    with (
+        patch("poseidon.main.HerdrDelegator.from_settings", return_value=herdr) as from_settings,
+        patch("poseidon.core.litellm.completion") as completion,
+    ):
+        result = cli.invoke(app, ["run", "--phase", "1b", "--role", "tester"])
+
+    assert result.exit_code == 0, result.output
+    from_settings.assert_called_once()
+    assert herdr.execute.call_args.args[1] == "claude-code"
     completion.assert_not_called()

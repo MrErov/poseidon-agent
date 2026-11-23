@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from poseidon.delegator import DelegationError, LocalCLIDelegator
+from poseidon.herdr_delegator import HerdrDelegator
 from poseidon.mcp_client import fetch_graph_context
 
 _PHASE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -88,9 +89,11 @@ class PhaseRunner:
         self,
         console: Console | None = None,
         delegator: LocalCLIDelegator | None = None,
+        herdr_delegator: HerdrDelegator | None = None,
     ) -> None:
         self.console = console or Console()
         self.delegator = delegator or LocalCLIDelegator()
+        self.herdr_delegator = herdr_delegator or HerdrDelegator()
 
     def run(
         self,
@@ -99,11 +102,12 @@ class PhaseRunner:
         model_name: str | None = None,
         context_path: str | None = None,
         executor: str = "api",
+        herdr_agent: str | None = None,
     ) -> str:
         """Valida y ejecuta una fase, guardando su artefacto cuando corresponda."""
         self.validate_gates(phase, spec_path or "")
         executor = executor.strip().lower()
-        if executor != "api" and executor not in _LOCAL_EXECUTORS:
+        if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
             raise InputValidationError(f"Executor no soportado: '{executor}'.")
         if executor == "api" and not (model_name and model_name.strip()):
             raise InputValidationError(
@@ -174,7 +178,12 @@ class PhaseRunner:
         else:
             prompt = self._format_messages_for_cli(messages)
             try:
-                content = self.delegator.execute(prompt, executor)
+                if executor == "herdr":
+                    content = self.herdr_delegator.execute(
+                        prompt, herdr_agent or "claude-code"
+                    )
+                else:
+                    content = self.delegator.execute(prompt, executor)
             except DelegationError as exc:
                 raise CompletionError(
                     f"No se pudo ejecutar la fase '{phase}' con '{executor}': {exc}"

@@ -1,0 +1,27 @@
+version: 2
+
+roles:
+  architect:
+    executor: api
+    model: nvidia_nim/moonshotai/kimi-k2-instruct
+  tester:
+    executor: claude-code
+    model: null
+    runtime: herdr
+    name_prefix: poseidon-tester
+
+phase_roles:
+  0: architect
+  1a: architect
+  1b: tester
+  2: tester
+  3: tester
+  4: architect
+
+herdr:
+  executable: hc
+  wait_timeout_seconds: 180
+  read_lines: 1000
+  keep: true
+  outlive_parent: true
+  fallback_to_subprocess: false

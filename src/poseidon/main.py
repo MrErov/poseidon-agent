@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.markup import escape
 
+from poseidon.config_manager import ConfigError, ConfigManager
 from poseidon.core import GateError, PhaseRunner, PoseidonError
+from poseidon.herdr_delegator import HerdrDelegator
 
 app = typer.Typer(
     name="poseidon",
@@ -67,17 +69,39 @@ def run_phase(
         ),
     ] = None,
     executor: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--executor",
-            help="Ejecutor: api, claude-code, codex u opencode.",
+            help="Executor: api, claude-code, codex, opencode, or herdr.",
         ),
-    ] = "api",
+    ] = None,
+    role: Annotated[
+        str | None,
+        typer.Option("--role", help="Agent role from config.yaml."),
+    ] = None,
+    herdr_agent: Annotated[
+        str | None,
+        typer.Option("--herdr-agent", help="Agent used when executor is herdr."),
+    ] = None,
 ) -> None:
     """Ejecuta una fase mediante LiteLLM o un CLI local."""
     _configure_utf8_output()
     load_dotenv()
-    if executor.strip().lower() == "api" and not (model and model.strip()):
+    try:
+        execution = ConfigManager().resolve(
+            phase=phase,
+            role=role,
+            cli_executor=executor,
+            cli_model=model,
+        )
+    except ConfigError as exc:
+        error_console.print(f"[bold red]Configuration error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from None
+
+    executor = execution.executor
+    model = execution.model
+    selected_herdr_agent = herdr_agent or execution.agent
+    if executor == "api" and not (model and model.strip()):
         error_console.print(
             "[bold red]Error:[/bold red] "
             "[red]--model es obligatorio cuando --executor=api.[/red]"
@@ -85,13 +109,19 @@ def run_phase(
         raise typer.Exit(code=1)
 
     try:
-        runner = PhaseRunner()
+        herdr_delegator = (
+            HerdrDelegator.from_settings(execution.herdr)
+            if executor == "herdr"
+            else None
+        )
+        runner = PhaseRunner(herdr_delegator=herdr_delegator)
         runner.run(
             phase=phase,
             spec_path=spec,
             model_name=model,
             context_path=context,
             executor=executor,
+            herdr_agent=selected_herdr_agent,
         )
     except GateError as exc:
         error_console.print(str(exc), style="bold red", markup=False)

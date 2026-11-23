@@ -1,5 +1,5 @@
 """Poseidon Agent: orquestador determinista para Keel Nav."""
 
-__version__ = "1.0.0-alpha"
+__version__ = "2.0.0"
 
 __all__ = ["__version__"]
