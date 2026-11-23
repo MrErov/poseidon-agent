@@ -2,6 +2,24 @@
 
 Poseidón es el motor de ejecución determinista de **Keel Nav**. Orquesta fases descritas en Markdown, inyecta una especificación y delega la inferencia en LiteLLM. **No es un agente autónomo**: no mantiene conversaciones ni conserva estado entre ejecuciones.
 
+## Arquitectura
+
+```mermaid
+graph TD
+    CLI[poseidon run --phase X] --> Runner[PhaseRunner]
+    Runner --> StateMachine[State Machine / Gatekeeper]
+    StateMachine --> ColdMemory[Lee .meta-skills/ y specs/]
+    ColdMemory --> Decision{¿Executor?}
+    Decision -- API --> LiteLLM[LiteLLM / NVIDIA NIM]
+    Decision -- CLI Local --> Subprocess[Claude Code / Codex / OpenCode]
+    LiteLLM --> Result[Respuesta del LLM]
+    Subprocess --> Result
+    Result --> AutoSave[Auto-Save de Artefactos]
+    Result --> SpecUpdate[Actualizar status: del Spec]
+    AutoSave --> Done[Éxito]
+    SpecUpdate --> Done
+```
+
 ## Modelo de memoria
 
 - **Memoria Fría:** instrucciones resueltas desde `.meta-skills/` mediante alias de fase o nombre exacto del archivo; las fases pertenecen al proyecto objetivo, no a Poseidón.
