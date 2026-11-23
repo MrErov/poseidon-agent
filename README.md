@@ -1,6 +1,45 @@
-# Poseidon Agent
+<div align="center">
+  <img src="docs/assets/logo.png" alt="Logo de Poseidón Agent" width="220" />
+  <h1>🔱 Poseidón Agent</h1>
+  <p><strong>The deterministic execution engine for Keel Nav.</strong></p>
+  <p>
+    <a href="https://github.com/MrErov/poseidon-agent/releases/tag/v1.0.0-alpha">
+      <img alt="GitHub release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&amp;sort=semver" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/blob/main/pyproject.toml">
+      <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
+      <img alt="Tests: 47 passed" src="https://img.shields.io/badge/tests-47%20passed-brightgreen.svg" />
+    </a>
+  </p>
+</div>
 
 Poseidón es el motor de ejecución determinista de **Keel Nav**. Orquesta fases descritas en Markdown, inyecta una especificación y delega la inferencia en LiteLLM. **No es un agente autónomo**: no mantiene conversaciones ni conserva estado entre ejecuciones.
+
+## Why Poseidón?
+
+Frente a herramientas autónomas como **Hermes-Agent**, Poseidón no decide su propio rumbo ni improvisa pasos. Es un orquestador que ejecuta exactamente el protocolo Keel Nav y hace explícitas sus restricciones:
+
+- **Memory Flush:** cada fase recibe mensajes nuevos; Goldfish siempre se ejecuta con Memoria Caliente vacía.
+- **Gatekeeper:** bloquea la Fase 2 si el spec no alcanzó `audited` o `approved`.
+- **State Machine:** solo los veredictos válidos permiten transiciones como `draft → audited → observed → certified`.
+- **Ejecución determinista:** carga la Memoria Fría del proyecto objetivo, usa `temperature=0.0` en la API y conserva los artefactos y veredictos como evidencia.
+
+Poseidón no sustituye al Navigator ni a las reglas de Keel Nav: las hace ejecutables y verificables.
+
+## Ecosystem
+
+| Componente | Responsabilidad |
+|------------|-----------------|
+| **Keel Nav** | Define las fases, plantillas, compuertas y convenciones que forman la Memoria Fría. |
+| **Poseidón Agent** | Resuelve fases, aísla memoria, delega inferencia, guarda artefactos y aplica la máquina de estados. |
+| **Plugin de DeepSeek** | Proporciona el punto de contacto e invocación desde la experiencia DeepSeek; no sustituye al motor ni implica usar la API de DeepSeek. |
+| **NVIDIA NIM o CLIs locales** | Ejecutan la inferencia a través de LiteLLM o de Claude Code, Codex y OpenCode. |
+| **Graphify MCP** | Añade opcionalmente contexto dinámico del grafo de código a las fases 1a y 1b. |
+
+Keel Nav aporta el protocolo, Poseidón lo ejecuta y el plugin de DeepSeek facilita su uso dentro del ecosistema, manteniendo cada responsabilidad separada.
+
 
 ## Arquitectura
 
