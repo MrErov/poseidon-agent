@@ -1,119 +1,40 @@
-"""Núcleo de ejecución de fases de Poseidón."""
+"""Núcleo de ejecución de fases de Poseidón (Orquestador)."""
 
 from __future__ import annotations
 
-import os
 import re
-from enum import Enum
 from pathlib import Path
-from typing import Any
 
-import litellm
-import yaml
+import litellm  # noqa: F401 - re-exported for backward compatibility with tests
 from rich.console import Console
 from rich.markdown import Markdown
 
-from poseidon.delegator import DelegationError, LocalCLIDelegator
+from poseidon.delegator import LocalCLIDelegator
+from poseidon.exceptions import (
+    ArtifactSaveError,
+    CompletionError,  # noqa: F401 - re-exported for backward compatibility
+    GateError,  # noqa: F401 - re-exported for backward compatibility
+    IllegalTransitionError,
+    InputValidationError,
+    PoseidonError,  # noqa: F401 - re-exported for backward compatibility
+)
+from poseidon.execution_engine import ExecutionEngine
 from poseidon.herdr_delegator import HerdrDelegator
-from poseidon.mcp_client import fetch_graph_context
-
-
-class PoseidonError(Exception):
-    """Error controlado que puede presentarse directamente al usuario."""
-
-
-class InputValidationError(PoseidonError):
-    """Una fase, una ruta o un archivo de entrada no es válido."""
-
-
-class GateError(PoseidonError):
-    """La compuerta de validación impide ejecutar una fase TDD."""
-
-
-class CompletionError(PoseidonError):
-    """LiteLLM no pudo generar una respuesta utilizable."""
-
-
-class ArtifactSaveError(PoseidonError):
-    """No se pudo guardar un artefacto o un metadato generado por una fase."""
-
-
-class IllegalTransitionError(PoseidonError):
-    """Intento de transición de estado no permitida."""
-
-
-class SpecStatus(str, Enum):
-    """Estados válidos del ciclo de vida de una especificación."""
-
-    DRAFT = "draft"
-    AUDITED = "audited"
-    APPROVED = "approved"
-    OBSERVED = "observed"
-    CERTIFIED = "certified"
-
-
-# Transiciones permitidas: estado_origen -> {estados_destino_permitidos}
-_VALID_TRANSITIONS: dict[SpecStatus, set[SpecStatus]] = {
-    SpecStatus.DRAFT: {SpecStatus.AUDITED},
-    SpecStatus.AUDITED: {SpecStatus.APPROVED, SpecStatus.OBSERVED},
-    SpecStatus.APPROVED: {SpecStatus.OBSERVED, SpecStatus.CERTIFIED},
-    SpecStatus.OBSERVED: {SpecStatus.CERTIFIED},
-    SpecStatus.CERTIFIED: set(),
-}
-
-
-_PHASE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
-_STATUS_PATTERN = re.compile(
-    r"^status[ \t]*:[ \t]*(?P<value>[^#\r\n]+?)[ \t]*(?:#.*)?$",
-    re.IGNORECASE | re.MULTILINE,
+from poseidon.prompt_builder import PromptBuilder
+from poseidon.spec_state_machine import SpecStateMachine
+from poseidon.types import (
+    _ALLOWED_GATE_STATUSES,
+    _LOCAL_EXECUTORS,
+    _PHASE_ALIASES,
+    _PHASE_KINDS_BY_PREFIX,
+    _PHASE_PATTERN,
+    SpecStatus,
+    _split_frontmatter,
 )
-_ALLOWED_GATE_STATUSES = {SpecStatus.AUDITED.value, SpecStatus.APPROVED.value}
-_LOCAL_EXECUTORS = {"claude-code", "codex", "opencode"}
-_PHASE_ALIASES: dict[str, str] = {
-    "0": "00-context-bootstrap.md",
-    "00": "00-context-bootstrap.md",
-    "context": "00-context-bootstrap.md",
-    "1a": "01-sdd-spec-writer.md",
-    "spec": "01-sdd-spec-writer.md",
-    "1b": "02-egm-goldfish-audit.md",
-    "goldfish": "02-egm-goldfish-audit.md",
-    "2": "03-tdd-cycle.md",
-    "tdd": "03-tdd-cycle.md",
-    "3": "04-odd-vertical-slice.md",
-    "odd": "04-odd-vertical-slice.md",
-    "4": "05-drift-control.md",
-    "drift": "05-drift-control.md",
-}
-_PHASE_KINDS_BY_PREFIX = {
-    "00": "context",
-    "01": "spec",
-    "02": "goldfish",
-    "03": "tdd",
-    "04": "odd",
-    "05": "drift",
-}
-_VERDICT_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_])(?P<key>effective_verdict|verdict)[ \t]*:[ \t]*"
-    r"['\"]?(?P<verdict>audited|rejected)\b",
-    re.IGNORECASE,
-)
-_DRIFT_VERDICT_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_])(?P<key>effective_verdict|verdict)[ \t]*:[ \t]*"
-    r"['\"]?(?P<verdict>no-drift|drifted-accepted|drifted)\b",
-    re.IGNORECASE,
-)
-_OBSERVATION_VERDICT_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_])(?P<key>effective_verdict|verdict|status)[ \t]*:[ \t]*"
-    r"['\"]?(?P<verdict>approved|observed)\b",
-    re.IGNORECASE,
-)
-
-# Deprecated: mantenidos por compatibilidad con tests existentes que los importen
-# No se usan en el código de producción desde v3.1.0
 
 
 class PhaseRunner:
-    """Ejecuta fases del proyecto actual sin conservar historial entre llamadas."""
+    """Orquesta la ejecución de fases coordinando StateMachine, PromptBuilder y ExecutionEngine."""
 
     def __init__(
         self,
@@ -122,8 +43,13 @@ class PhaseRunner:
         herdr_delegator: HerdrDelegator | None = None,
     ) -> None:
         self.console = console or Console()
-        self.delegator = delegator or LocalCLIDelegator()
-        self.herdr_delegator = herdr_delegator or HerdrDelegator()
+        self.state_machine = SpecStateMachine(console=self.console)
+        self.prompt_builder = PromptBuilder(console=self.console)
+        self.execution_engine = ExecutionEngine(
+            console=self.console, delegator=delegator, herdr_delegator=herdr_delegator
+        )
+        # Backward compatibility: expose delegator directly
+        self.delegator = self.execution_engine.delegator
 
     def run(
         self,
@@ -145,11 +71,12 @@ class PhaseRunner:
 
         phase_file = self._resolve_phase_file(phase)
         phase_kind = self._phase_kind(phase, phase_file)
-
-        # Validar gates usando el phase_kind resuelto, no el string crudo
-        self.validate_gates(phase_kind, spec_path or "")
         spec_file = Path(spec_path) if spec_path else None
         context_file = Path(context_path) if context_path else None
+
+        # Validar gates usando el phase_kind resuelto
+        if phase_kind == "tdd":
+            self.state_machine.validate_gate(spec_path, _ALLOWED_GATE_STATUSES)
 
         self._ensure_file(
             phase_file,
@@ -160,32 +87,25 @@ class PhaseRunner:
         specification: str | None = None
         if spec_file is not None:
             self._ensure_file(
-                spec_file,
-                f"No se encontró el archivo de especificación: {spec_file}",
+                spec_file, f"No se encontró el archivo de especificación: {spec_file}"
             )
             specification = self._read_file(spec_file, "la especificación")
 
         context: str | None = None
         if context_file is not None:
             self._ensure_file(
-                context_file,
-                f"No se encontró el archivo de contexto: {context_file}",
+                context_file, f"No se encontró el archivo de contexto: {context_file}"
             )
             context = self._read_file(context_file, "el contexto")
 
-        graph_context = ""
-        if phase_kind in {"spec", "goldfish"} and os.getenv(
-            "GRAPHIFY_MCP_URL", ""
-        ).strip():
-            query_target = spec_file or context_file
-            query = str(query_target) if query_target is not None else phase
-            graph_context = fetch_graph_context(query)
+        graph_context = self.prompt_builder.fetch_graph_context_if_needed(
+            phase_kind, spec_file, context_file
+        )
 
         if phase_kind == "goldfish":
             self.console.print("Aislando Memoria para Goldfish", style="bold yellow")
 
-        # La Memoria Caliente es siempre una lista local y nueva, sin historial.
-        messages = self._build_messages(
+        messages = self.prompt_builder.build_messages(
             phase=phase,
             spec_path=spec_file,
             cold_memory=cold_memory,
@@ -194,70 +114,17 @@ class PhaseRunner:
             graph_context=graph_context,
         )
 
-        if executor == "api":
-            try:
-                response = litellm.completion(
-                    model=model_name,
-                    messages=messages,
-                    temperature=0.0,
-                    timeout=300,
-                )
-            except Exception as exc:
-                raise CompletionError(
-                    f"No se pudo ejecutar la fase '{phase}' con el modelo "
-                    f"'{model_name}': {exc}"
-                ) from exc
-            content = self._extract_content(response)
-        else:
-            prompt = self._format_messages_for_cli(messages)
-            try:
-                if executor == "herdr":
-                    content = self.herdr_delegator.execute(
-                        prompt, herdr_agent or "claude-code"
-                    )
-                else:
-                    content = self.delegator.execute(prompt, executor)
-            except DelegationError as exc:
-                raise CompletionError(
-                    f"No se pudo ejecutar la fase '{phase}' con '{executor}': {exc}"
-                ) from exc
+        content = self.execution_engine.execute(
+            messages, executor, model_name, herdr_agent
+        )
 
         self.console.print(Markdown(content))
 
-        artifact_path = self._save_artifact(
-            phase_kind, content, spec_file, context_file
-        )
+        artifact_path = self._save_artifact(phase_kind, content, spec_file, context_file)
         if phase_kind in {"goldfish", "odd", "drift"}:
             self._update_spec_metadata(spec_file, content, artifact_path, phase_kind)
 
         return content
-
-    def validate_gates(self, phase_kind: str, spec_path: str) -> None:
-        """Exige una especificación auditada o aprobada antes de una fase TDD."""
-        # Solo bloquear si el phase_kind resuelto es TDD
-        if phase_kind != "tdd":
-            return
-
-        if not spec_path or not Path(spec_path).is_file():
-            raise GateError(self._gate_message("missing"))
-
-        specification = self._read_file(Path(spec_path), "el spec para el Gatekeeper")
-        frontmatter = self._extract_frontmatter(specification)
-        status_match = _STATUS_PATTERN.search(frontmatter)
-        status = "missing"
-
-        if status_match:
-            status = status_match.group("value").strip().strip("\"'").lower() or "missing"
-
-        if status not in _ALLOWED_GATE_STATUSES:
-            raise GateError(self._gate_message(status))
-
-    @staticmethod
-    def _gate_message(status: str) -> str:
-        return (
-            "❌ GATEKEEPER BLOQUEÓ LA FASE: El spec no ha pasado la auditoría "
-            f"Goldfish (status actual: {status}). Ejecuta la Fase 1b primero."
-        )
 
     def _save_artifact(
         self,
@@ -266,17 +133,15 @@ class PhaseRunner:
         spec_path: Path | None,
         context_path: Path | None,
     ) -> Path | None:
-        """Persiste la salida de la fase cuando produce un artefacto Markdown."""
         artifact_path = self._artifact_path(phase_kind, spec_path, context_path)
         if artifact_path is None:
             return None
 
-        # Limpiar fences de código Markdown (```markdown ... ```) que el LLM pueda añadir
         clean_content = self._strip_markdown_fences(content)
 
         try:
             artifact_path.parent.mkdir(parents=True, exist_ok=True)
-            artifact_path.write_text(clean_content, encoding="utf-8")
+            self.state_machine._atomic_write(artifact_path, clean_content)
         except OSError as exc:
             raise ArtifactSaveError(
                 f"No se pudo guardar el artefacto en {artifact_path}: {exc}"
@@ -289,11 +154,78 @@ class PhaseRunner:
         )
         return artifact_path
 
+    def _update_spec_metadata(
+        self,
+        spec_path: Path | None,
+        report_content: str,
+        report_path: Path | None,
+        phase_kind: str = "goldfish",
+    ) -> None:
+        if spec_path is None:
+            return
+
+        if phase_kind == "goldfish":
+            verdict = self._extract_strict_verdict(report_content, "goldfish")
+            if verdict != "audited":
+                self.console.print(
+                    "⚠️ Auditoría rechazada. El spec sigue en draft.",
+                    style="yellow",
+                    markup=False,
+                )
+                return
+            target_status = SpecStatus.AUDITED
+            report_field = "goldfish_audit"
+            success_message = "✅ Spec actualizado a status: audited"
+        elif phase_kind == "odd":
+            verdict = self._extract_strict_verdict(report_content, "odd")
+            if verdict not in {"approved", "observed"}:
+                self.console.print(
+                    "✅ Observación ODD guardada", style="green", markup=False
+                )
+                return
+            target_status = SpecStatus.OBSERVED
+            report_field = None
+            success_message = "✅ Spec actualizado a status: observed"
+        elif phase_kind == "drift":
+            verdict = self._extract_strict_verdict(report_content, "drift")
+            if verdict == "drifted":
+                self.console.print(
+                    "❌ Drift rechazado. El spec no puede ser certificado",
+                    style="red",
+                    markup=False,
+                )
+                return
+            if verdict not in {"no-drift", "drifted-accepted"}:
+                self.console.print(
+                    "⚠️ No se encontró un veredicto Drift certificable; el spec no cambió.",
+                    style="yellow",
+                    markup=False,
+                )
+                return
+            target_status = SpecStatus.CERTIFIED
+            report_field = "drift_report"
+            success_message = "✅ Drift certificado. Spec actualizado a status: certified"
+        else:
+            raise InputValidationError(
+                f"Tipo de fase no soportado para actualizar metadatos: {phase_kind}"
+            )
+
+        try:
+            self.state_machine.transition(
+                spec_path, target_status, report_path, report_field
+            )
+        except IllegalTransitionError:
+            raise
+        except ArtifactSaveError:
+            raise
+        except Exception as exc:
+            raise ArtifactSaveError(f"No se pudo actualizar el spec: {exc}") from exc
+
+        self.console.print(success_message, style="green", markup=False)
+
     @staticmethod
     def _strip_markdown_fences(content: str) -> str:
-        """Elimina bloques de código Markdown (fences) que envuelven todo el contenido."""
         stripped = content.strip()
-        # Patrón para detectar ```markdown ... ``` o ``` ... ``` al inicio y final
         fence_pattern = re.compile(
             r"^```(?:markdown|md)?\s*\n(.*?)\n```\s*$", re.DOTALL | re.IGNORECASE
         )
@@ -303,18 +235,34 @@ class PhaseRunner:
         return content
 
     @staticmethod
+    def _extract_strict_verdict(report_content: str, phase_kind: str) -> str | None:
+        import yaml
+
+        parts = _split_frontmatter(report_content)
+        if parts is None:
+            return None
+        _, frontmatter_body, _ = parts
+        try:
+            data = yaml.safe_load(frontmatter_body) or {}
+        except yaml.YAMLError:
+            return None
+        for key in ("effective_verdict", "verdict", "status"):
+            if key in data:
+                value = str(data[key]).strip().lower()
+                if value:
+                    return value
+        return None
+
+    @staticmethod
     def _is_goldfish_phase(phase: str) -> bool:
-        """Indica si la fase es una auditoría Goldfish (1b)."""
         normalized_phase = phase.lower()
         return "1b" in normalized_phase or "goldfish" in normalized_phase
 
     @classmethod
     def _phase_kind(cls, phase: str, phase_file: Path) -> str:
-        """Clasifica la fase resuelta para aplicar su comportamiento."""
         kind = _PHASE_KINDS_BY_PREFIX.get(phase_file.stem[:2])
         if kind is not None:
             return kind
-
         normalized_phase = phase.lower()
         if cls._is_goldfish_phase(phase):
             return "goldfish"
@@ -336,19 +284,13 @@ class PhaseRunner:
         spec_path: Path | None,
         context_path: Path | None,
     ) -> Path | None:
-        """Calcula el destino del artefacto según el tipo de fase.
-
-        Las fases TDD (2 o superior) producen salidas estructuradas, no un
-        Markdown, por lo que todavía no generan archivo.
-        """
         if phase_kind not in {"spec", "goldfish", "odd", "drift"}:
             return None
 
         spec_name = self._spec_name(spec_path, context_path)
         if spec_name is None:
             self.console.print(
-                "⚠️ No se pudo determinar el nombre del spec; "
-                "el artefacto no se guardó.",
+                "⚠️ No se pudo determinar el nombre del spec; el artefacto no se guardó.",
                 style="yellow",
             )
             return None
@@ -356,265 +298,43 @@ class PhaseRunner:
         specs_dir = Path.cwd() / "specs"
         if phase_kind == "spec":
             return specs_dir / f"{spec_name}.spec.md"
-
         if phase_kind == "goldfish":
             audit_number = self._next_audit_number(specs_dir, spec_name)
             return specs_dir / f"{spec_name}.audit.{audit_number}.md"
-
         if phase_kind == "odd":
             return specs_dir / f"{spec_name}.observation.md"
-
         drift_number = self._next_drift_number(specs_dir, spec_name)
         return specs_dir / f"{spec_name}.drift.{drift_number}.md"
 
-    def _update_spec_metadata(
-        self,
-        spec_path: Path | None,
-        report_content: str,
-        report_path: Path | None,
-        phase_kind: str = "goldfish",
-    ) -> None:
-        """Sincroniza el spec con los veredictos Goldfish, ODD y Drift."""
-        if spec_path is None:
-            return
-
-        # Leer el estado actual del spec desde el frontmatter
-        specification = self._read_file(spec_path, "el spec para actualizar su frontmatter")
-        frontmatter = self._extract_frontmatter(specification)
-        current_status_str = self._extract_status_from_frontmatter(frontmatter)
-
-        try:
-            current_status = SpecStatus(current_status_str)
-        except ValueError:
-            # Si el estado no es válido, tratamos como DRAFT por seguridad
-            current_status = SpecStatus.DRAFT
-
-        # Determinar el estado objetivo y validar la transición según el phase_kind
-        if phase_kind == "goldfish":
-            verdict = self._extract_strict_verdict(report_content, "goldfish")
-            if verdict != "audited":
-                self.console.print(
-                    "⚠️ Auditoría rechazada. El spec sigue en draft.",
-                    style="yellow",
-                    markup=False,
-                )
-                return
-            target_status = SpecStatus.AUDITED
-            report_field = "goldfish_audit"
-            success_message = "✅ Spec actualizado a status: audited"
-        elif phase_kind == "odd":
-            verdict = self._extract_strict_verdict(report_content, "odd")
-            if verdict not in {"approved", "observed"}:
-                self.console.print(
-                    "✅ Observación ODD guardada",
-                    style="green",
-                    markup=False,
-                )
-                return
-            target_status = SpecStatus.OBSERVED
-            report_field = None
-            success_message = "✅ Spec actualizado a status: observed"
-        elif phase_kind == "drift":
-            verdict = self._extract_strict_verdict(report_content, "drift")
-            if verdict == "drifted":
-                self.console.print(
-                    "❌ Drift rechazado. El spec no puede ser certificado",
-                    style="red",
-                    markup=False,
-                )
-                return
-            if verdict not in {"no-drift", "drifted-accepted"}:
-                self.console.print(
-                    "⚠️ No se encontró un veredicto Drift certificable; "
-                    "el spec no cambió.",
-                    style="yellow",
-                    markup=False,
-                )
-                return
-            target_status = SpecStatus.CERTIFIED
-            report_field = "drift_report"
-            success_message = "✅ Drift certificado. Spec actualizado a status: certified"
-        else:
-            raise InputValidationError(
-                f"Tipo de fase no soportado para actualizar metadatos: {phase_kind}"
-            )
-
-        # Validar transición de estado permitida
-        allowed = _VALID_TRANSITIONS.get(current_status, set())
-        if target_status not in allowed:
-            allowed_str = ", ".join(s.value for s in allowed)
-            raise IllegalTransitionError(
-                "Transición de estado no permitida: "
-                f"{current_status.value} -> {target_status.value}. "
-                f"Transiciones válidas desde {current_status.value}: {allowed_str}"
-            )
-
-        if report_path is None:
-            self.console.print(
-                "⚠️ No se pudo registrar el reporte en el spec.",
-                style="yellow",
-                markup=False,
-            )
-            return
-
-        if self._split_frontmatter(specification) is None:
-            self.console.print(
-                "⚠️ El spec no tiene frontmatter; no se actualizó su estado.",
-                style="yellow",
-                markup=False,
-            )
-            return
-
-        updated = self._set_frontmatter_field(
-            specification,
-            "status",
-            target_status.value,
-            only_if=current_status.value,
-        )
-        if report_field is not None:
-            updated = self._set_frontmatter_field(
-                updated,
-                report_field,
-                self._display_path(report_path),
-            )
-
-        try:
-            spec_path.write_text(updated, encoding="utf-8")
-        except OSError as exc:
-            raise ArtifactSaveError(
-                f"No se pudo actualizar el spec {spec_path}: {exc}"
-            ) from exc
-
-        self.console.print(success_message, style="green", markup=False)
-
-    @staticmethod
-    def _extract_status_from_frontmatter(frontmatter: str) -> str:
-        """Extrae el valor del campo 'status' del frontmatter YAML."""
-        match = _STATUS_PATTERN.search(frontmatter)
-        if match:
-            return match.group("value").strip().strip("\"'").lower() or "draft"
-        return "draft"
-
-    @staticmethod
-    def _extract_strict_verdict(report_content: str, phase_kind: str) -> str | None:
-        """
-        Extrae el veredicto ÚNICAMENTE del frontmatter del reporte (primer bloque --- ... ---).
-        Usa yaml.safe_load para parsing estricto. No busca en texto libre.
-        """
-        parts = PhaseRunner._split_frontmatter(report_content)
-        if parts is None:
-            return None
-
-        _, frontmatter_body, _ = parts
-        try:
-            data = yaml.safe_load(frontmatter_body) or {}
-        except yaml.YAMLError:
-            return None
-
-        # Buscar claves de veredicto en orden de prioridad
-        for key in ("effective_verdict", "verdict", "status"):
-            if key in data:
-                value = str(data[key]).strip().lower()
-                if value:
-                    return value
-        return None
-
-    @classmethod
-    def _set_frontmatter_field(
-        cls,
-        content: str,
-        field: str,
-        value: str,
-        *,
-        only_if: str | None = None,
-    ) -> str:
-        """Reemplaza un campo del frontmatter preservando el resto del YAML."""
-        parts = cls._split_frontmatter(content)
-        if parts is None:
-            return content
-
-        opening, body, closing = parts
-        field_pattern = re.compile(
-            rf"^(?P<prefix>[ \t]*{re.escape(field)}[ \t]*:[ \t]*)"
-            r"(?P<value>[^\r\n]*?)"
-            r"(?P<comment>[ \t]+#[^\r\n]*)?"
-            r"(?P<ending>\r?)$",
-            re.IGNORECASE | re.MULTILINE,
-        )
-        match = field_pattern.search(body)
-
-        if match is not None:
-            current_value = match.group("value").strip().strip("\"'")
-            if only_if is not None and current_value.lower() != only_if.lower():
-                return content
-
-            replacement = (
-                f"{match.group('prefix')}{value}"
-                f"{match.group('comment') or ''}{match.group('ending')}"
-            )
-            new_body = body[: match.start()] + replacement + body[match.end() :]
-        elif body.endswith(("\n", "\r")):
-            new_body = f"{body}{field}: {value}\n"
-        elif body:
-            new_body = f"{body}\n{field}: {value}\n"
-        else:
-            new_body = f"{field}: {value}\n"
-
-        return f"{opening}{new_body}{closing}"
-
-    @staticmethod
-    def _split_frontmatter(content: str) -> tuple[str, str, str] | None:
-        """Separa el delimitador inicial, el cuerpo YAML y el resto del documento."""
-        lines = content.splitlines(keepends=True)
-        if not lines or lines[0].strip() != "---":
-            return None
-
-        for index, line in enumerate(lines[1:], start=1):
-            if line.strip() == "---":
-                opening = lines[0]
-                body = "".join(lines[1:index])
-                closing = "".join(lines[index:])
-                return opening, body, closing
-
-        return None
-
     @staticmethod
     def _spec_name(spec_path: Path | None, context_path: Path | None) -> str | None:
-        """Deriva el nombre base del spec a partir del spec o, si falta, del contexto."""
         for candidate in (spec_path, context_path):
             if candidate is None:
                 continue
-
             name = candidate.name
             lowered = name.lower()
             for suffix in (".spec.md", ".md"):
                 if lowered.endswith(suffix):
                     name = name[: -len(suffix)]
                     break
-
             if name:
                 return name
-
         return None
 
     @staticmethod
     def _next_audit_number(specs_dir: Path, spec_name: str) -> int:
-        """Devuelve el siguiente número de auditoría disponible para un spec."""
         return PhaseRunner._next_artifact_number(specs_dir, spec_name, "audit")
 
     @staticmethod
     def _next_drift_number(specs_dir: Path, spec_name: str) -> int:
-        """Devuelve la siguiente ronda Drift disponible para un spec."""
         return PhaseRunner._next_artifact_number(specs_dir, spec_name, "drift")
 
     @staticmethod
     def _next_artifact_number(
         specs_dir: Path, spec_name: str, artifact_kind: str
     ) -> int:
-        """Calcula una ronda sin reutilizar números de artefactos anteriores."""
         if not specs_dir.is_dir():
             return 1
-
         artifact_pattern = re.compile(
             rf"^{re.escape(spec_name)}\.{re.escape(artifact_kind)}\.(\d+)\.md$",
             re.IGNORECASE,
@@ -625,7 +345,6 @@ class PhaseRunner:
             raise ArtifactSaveError(
                 f"No se pudo inspeccionar el directorio de specs {specs_dir}: {exc}"
             ) from exc
-
         numbers = [
             int(match.group(1))
             for path in entries
@@ -635,41 +354,28 @@ class PhaseRunner:
 
     @staticmethod
     def _display_path(path: Path) -> str:
-        """Muestra la ruta relativa al proyecto con separadores POSIX."""
         try:
             return path.relative_to(Path.cwd()).as_posix()
         except ValueError:
             return path.as_posix()
 
-    @classmethod
-    def _extract_frontmatter(cls, content: str) -> str:
-        """Devuelve únicamente el frontmatter inicial, sin el cuerpo Markdown."""
-        parts = cls._split_frontmatter(content)
-        return parts[1] if parts is not None else ""
-
     @staticmethod
     def _resolve_phase_file(phase: str) -> Path:
-        """Traduce un alias o nombre de fase al archivo de Memoria Fría."""
         normalized = phase.strip()
         if normalized.lower().endswith(".md"):
             normalized = normalized[:-3]
-
         if not normalized or not _PHASE_PATTERN.fullmatch(normalized):
             raise InputValidationError(
                 "La fase solo puede contener letras, números, guiones y guiones bajos."
             )
-
         skills_dir = Path.cwd() / ".meta-skills"
         normalized_lower = normalized.lower()
-
         alias = _PHASE_ALIASES.get(normalized_lower)
         if alias is not None:
             return skills_dir / alias
-
         exact_file = skills_dir / f"{normalized}.md"
         if exact_file.is_file():
             return exact_file
-
         if skills_dir.is_dir():
             try:
                 candidates = sorted(
@@ -684,7 +390,6 @@ class PhaseRunner:
                 raise InputValidationError(
                     f"No se pudo leer el directorio de fases {skills_dir}: {exc}"
                 ) from exc
-
             starts_with = [
                 path
                 for path in candidates
@@ -692,13 +397,11 @@ class PhaseRunner:
             ]
             if starts_with:
                 return starts_with[0]
-
             contains = [
                 path for path in candidates if normalized_lower in path.stem.lower()
             ]
             if contains:
                 return contains[0]
-
         raise InputValidationError(
             f"No se encontró la Memoria Fría para la fase '{phase}' en {skills_dir}"
         )
@@ -714,75 +417,3 @@ class PhaseRunner:
             return path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
             raise InputValidationError(f"No se pudo leer {description} en {path}: {exc}") from exc
-
-    @staticmethod
-    def _build_messages(
-        phase: str,
-        spec_path: Path | None,
-        cold_memory: str,
-        specification: str | None,
-        context: str | None = None,
-        graph_context: str | None = None,
-    ) -> list[dict[str, str]]:
-        """Crea una lista nueva; nunca reutiliza ni extiende mensajes anteriores."""
-        if spec_path is None:
-            intro = (
-                f"Ejecuta la fase '{phase}'.\n\n"
-                "No se proporcionó una especificación de entrada para esta fase."
-            )
-        else:
-            intro = f"Ejecuta la fase '{phase}' sobre la especificación '{spec_path}'."
-
-        blocks: list[str] = []
-        if context is not None:
-            blocks.append(
-                "--- INICIO DEL CONTEXTO ---\n"
-                f"{context}\n"
-                "--- FIN DEL CONTEXTO ---"
-            )
-        if graph_context:
-            blocks.append(
-                "--- INICIO DEL GRAFO DE CÓDIGO (Graphify MCP) ---\n"
-                f"{graph_context}\n"
-                "--- FIN DEL GRAFO DE CÓDIGO (Graphify MCP) ---"
-            )
-        if specification is not None:
-            blocks.append(
-                "--- INICIO DE LA ESPECIFICACIÓN ---\n"
-                f"{specification}\n"
-                "--- FIN DE LA ESPECIFICACIÓN ---"
-            )
-
-        user_content = "\n\n".join([intro, *blocks])
-
-        return [
-            {
-                "role": "system",
-                "content": cold_memory,
-            },
-            {
-                "role": "user",
-                "content": user_content,
-            },
-        ]
-
-    @staticmethod
-    def _format_messages_for_cli(messages: list[dict[str, str]]) -> str:
-        """Serializa únicamente los mensajes nuevos de esta ejecución."""
-        return "\n\n".join(
-            f"--- {message['role'].upper()} ---\n{message['content']}"
-            for message in messages
-        )
-
-    @staticmethod
-    def _extract_content(response: Any) -> str:
-        """Extrae texto de una respuesta no streaming de LiteLLM."""
-        try:
-            content = response.choices[0].message.content
-        except (AttributeError, IndexError, TypeError) as exc:
-            raise CompletionError("LiteLLM devolvió una respuesta con formato inesperado.") from exc
-
-        if not isinstance(content, str) or not content.strip():
-            raise CompletionError("LiteLLM devolvió una respuesta vacía o sin contenido de texto.")
-
-        return content

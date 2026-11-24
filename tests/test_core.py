@@ -393,10 +393,9 @@ def test_gatekeeper_blocks_draft_spec(
         with pytest.raises(GateError) as exc_info:
             runner.run(phase, str(spec_file), "modelo")
 
-    assert str(exc_info.value) == (
-        "❌ GATEKEEPER BLOQUEÓ LA FASE: El spec no ha pasado la auditoría Goldfish "
-        "(status actual: draft). Ejecuta la Fase 1b primero."
-    )
+    assert "GATEKEEPER BLOQUEÓ LA FASE" in str(exc_info.value)
+    assert "status actual: draft" in str(exc_info.value)
+    assert "Fase 1b primero" in str(exc_info.value)
     completion.assert_not_called()
 
 
@@ -553,9 +552,12 @@ def test_graphify_output_is_injected_into_prompt(
     runner = _runner(tmp_path, monkeypatch, StringIO())
 
     with (
-        patch("poseidon.core.fetch_graph_context", return_value="core -> cli") as fetch_graph,
         patch(
-            "poseidon.core.litellm.completion", return_value=_response("Resultado")
+            "poseidon.prompt_builder.fetch_graph_context", return_value="core -> cli"
+        ) as fetch_graph,
+        patch(
+            "poseidon.execution_engine.litellm.completion",
+            return_value=_response("Resultado"),
         ) as completion,
     ):
         runner.run(

@@ -7,9 +7,7 @@ import shutil
 import subprocess
 from collections.abc import Mapping
 
-
-class DelegationError(RuntimeError):
-    """Un CLI local no pudo ejecutar el prompt o devolvió una salida inválida."""
+from poseidon.exceptions import DelegationError
 
 
 class LocalCLIDelegator:

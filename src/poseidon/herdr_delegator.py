@@ -11,7 +11,7 @@ from typing import Any
 
 from rich.console import Console
 
-from poseidon.delegator import DelegationError
+from poseidon.exceptions import DelegationError
 
 
 class HerdrDelegator:

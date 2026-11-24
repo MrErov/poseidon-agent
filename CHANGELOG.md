@@ -2,17 +2,25 @@
 
 All notable changes to Poseidon Agent will be documented in this file.
 
-## [3.2.0] - 2026-11-24
+## [3.3.0] - 2026-11-24
+### Refactored
+- **W1 God Object**: Split `PhaseRunner` into three cohesive classes:
+  - `SpecStateMachine`: Frontmatter I/O, state transitions, gate validation.
+  - `PromptBuilder`: Hot memory construction, context injection, Graphify integration.
+  - `ExecutionEngine`: LiteLLM API calls, local CLI delegation, Herdr integration.
+  - `PhaseRunner` now acts as a thin orchestrator coordinating the three components.
+- **W2 Config Validation**: Added `ConfigValidationError` with strict type checking for all config fields (executor, runtime, model, herdr settings). Rejects `bool("false")` → `True` bug; requires explicit `true`/`false`.
+- **W3 Atomic Persistence**: All writes (artifacts, spec updates) use temp file + `os.replace()` for crash safety. No more truncated specs on power loss.
+- **New Public API**: `SpecStateMachine`, `PromptBuilder`, `ExecutionEngine`, `ConfigValidationError` exported from package root.
+
 ### Fixed
-- **B4 TUI Improvements**: Added `Input` widgets for Spec Path and Context Path. Phase execution now reads these inputs and passes them to `PhaseRunner.run()`. Herdr console output now routes through TUI's `_MessageText` adapter (no more screen corruption). Removed duplicate output rendering.
-- **B5 Herdr JSON-RPC Hardening**: Strict validation that `result` and `error` are dicts before field access. Added `_get_str_field()` and `_get_bool_field()` helpers. `terminal.read` now verifies `complete=true` to detect truncated reads.
-- **B6 Timeouts & Cancellation**: LiteLLM `completion()` now uses 300s timeout. Added `Ctrl+X` binding to cancel running worker (and Herdr terminal if applicable).
+- **GateError Type**: `validate_gate()` now raises `GateError` (not `InputValidationError`) for backward compatibility.
+- **Tests**: Updated all patches to target new module locations (`execution_engine.litellm`, `prompt_builder.fetch_graph_context`).
 
 ### Added
-- TUI: Spec/Context path inputs, cancellation support, non-markup RichLog.
-- Herdr: Strict JSON-RPC response validation, incomplete-read detection.
-- Core: 300s timeout on LiteLLM calls.
-- Tests for Herdr non-dict result/error, incomplete reads, empty address/text.
+- Strict herdr config validation (numeric ranges, type coercion).
+- Atomic write helper in `SpecStateMachine._atomic_write()`.
+- Tests for atomic persistence, config validation errors, and new class boundaries.
 
 ## [3.1.0] - 2026-11-24
 ### Fixed
