@@ -9,6 +9,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
+
 from poseidon.delegator import DelegationError
 
 
@@ -30,6 +32,7 @@ class HerdrDelegator:
         outlive_parent: bool = True,
         name_prefix: str = "poseidon",
         connection_timeout_seconds: float = 30.0,
+        console: Console | None = None,
     ) -> None:
         if wait_timeout_seconds <= 0 or connection_timeout_seconds <= 0:
             raise ValueError("Herdr timeouts must be greater than zero")
@@ -43,6 +46,7 @@ class HerdrDelegator:
         self.outlive_parent = outlive_parent
         self.name_prefix = name_prefix
         self.connection_timeout_seconds = connection_timeout_seconds
+        self.console = console or Console()
         self._request_id = 0
 
     @classmethod
@@ -94,6 +98,15 @@ class HerdrDelegator:
             self._call(
                 "terminal.send",
                 {"terminal": address, "text": prompt_with_enter, "wait": False},
+            )
+            self.console.print(
+                f"⏳ Agente lanzado en terminal {address}. Esperando a que termine...",
+                style="cyan",
+            )
+            self.console.print(
+                "💡 Si el agente se queda pidiendo permisos, abre otra terminal y usa: "
+                f"hc attach {address}",
+                style="yellow",
             )
             wait_result = self._call(
                 "terminal.wait",

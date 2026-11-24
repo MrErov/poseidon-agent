@@ -37,7 +37,8 @@ def test_herdr_executes_full_json_rpc_lifecycle() -> None:
         ),
         _process(_rpc({"text": "## Result", "complete": True, "how": "history"}, request_id=4)),
     ]
-    delegator = HerdrDelegator(name_prefix="poseidon-test")
+    console = Mock()
+    delegator = HerdrDelegator(name_prefix="poseidon-test", console=console)
 
     with patch("poseidon.herdr_delegator.subprocess.Popen", side_effect=processes) as popen:
         result = delegator.execute("large prompt", "claude-code")
@@ -59,6 +60,13 @@ def test_herdr_executes_full_json_rpc_lifecycle() -> None:
     assert requests[0]["params"]["outlive_parent"] is True
     assert requests[1]["params"]["text"] == "large prompt\n"
     assert requests[3]["params"]["terminal"] == "t42"
+    assert console.print.call_count == 2
+    first_message = console.print.call_args_list[0]
+    second_message = console.print.call_args_list[1]
+    assert "t42" in first_message.args[0]
+    assert first_message.kwargs["style"] == "cyan"
+    assert "hc attach t42" in second_message.args[0]
+    assert second_message.kwargs["style"] == "yellow"
 
 
 def test_herdr_ignores_unrelated_json_rpc_messages() -> None:
