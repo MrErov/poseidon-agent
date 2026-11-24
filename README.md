@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/logo.png" alt="Poseidon Agent logo with trident" width="200">
   <h1>🔱 Poseidon Agent</h1>
-  <p><strong>The deterministic execution engine for Keel Nav.</strong></p>
+  <p><strong>The guided autonomous runtime for Keel Nav.</strong></p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/tag/v1.0.0-alpha">
       <img alt="GitHub release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&amp;sort=semver" />
@@ -10,23 +10,28 @@
       <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests: 61 passed" src="https://img.shields.io/badge/tests-61%20passed-brightgreen.svg" />
+      <img alt="Tests: 63 passed" src="https://img.shields.io/badge/tests-63%20passed-brightgreen.svg" />
     </a>
   </p>
 </div>
 
-Poseidón is the deterministic execution engine for **Keel Nav**. It orchestrates phases defined in Markdown, injects specifications, and delegates inference to LiteLLM or local CLIs. **It is not an autonomous agent**: it does not retain conversations or preserve state between executions.
+Poseidón is **the guided autonomous runtime for Keel Nav** — a **local-first AI agent with 3-layer cognitive memory**:
 
-## Why Poseidón?
+- **Cold Memory:** Keel Nav phases and project specifications loaded from disk.
+- **Hot Memory:** a fresh message list for each execution, with Goldfish isolation.
+- **Context and Graph Memory:** repository context and optional Graphify dependencies injected around the specification.
 
-Unlike autonomous tools such as **Hermes-Agent**, Poseidón does not choose its own course or improvise steps. It executes the Keel Nav protocol exactly and makes its constraints explicit:
+## Why Poseidon is Different
 
-- **Memory Flush:** every phase receives fresh messages; Goldfish always runs with empty Hot Memory.
-- **Gatekeeper:** Phase 2 is blocked unless the spec has reached `audited` or `approved`.
-- **State Machine:** only valid verdicts enable transitions such as `draft -> audited -> observed -> certified`.
-- **Deterministic execution:** Cold Memory is loaded from the target project, API calls use `temperature=0.0`, and artifacts and verdicts are preserved as evidence.
+Unlike free-loop agents such as **Hermes-Agent**, Poseidón does not improvise: **it obeys a map**. Keel Nav defines the route, while Poseidón handles execution, persistence, and evidence. The Navigator remains in control of every transition.
 
-Poseidón does not replace the Navigator or the Keel Nav rules: it makes them executable and verifiable.
+## 4 Pillars
+
+- **Guided 5-Phase Engine (Keel Nav native):** Context Bootstrap, Spec Writer, Goldfish Audit, Strict TDD, ODD Vertical Slice, and Drift Control, all guarded by deterministic state transitions.
+- **Full Local & OS Agency:** persistent Herdr terminals, local CLIs, and direct subprocess execution without surrendering control of the repository to a hosted agent.
+- **Human-in-the-Loop:** the Gatekeeper blocks unapproved work, while artifacts and verdicts keep every decision inspectable.
+- **Multi-Channel:** command-line execution today, an interactive Textual TUI now, and future desktop channels.
+
 
 ## Ecosystem
 
@@ -44,7 +49,7 @@ Keel Nav provides the protocol, Poseidón executes it, and the DeepSeek plugin m
 
 ```mermaid
 graph TD
-    CLI[poseidon run --phase X] --> Runner[PhaseRunner]
+    CLI[poseidon run / poseidon tui] --> Runner[PhaseRunner]
     Runner --> StateMachine[State Machine / Gatekeeper]
     StateMachine --> ColdMemory[Read .meta-skills/ and specs/]
     ColdMemory --> Decision{Executor?}
@@ -185,6 +190,18 @@ Poseidón appends a newline to the prompt when needed, ensuring terminal-based a
 Poseidón uses JSON-RPC 2.0 over `hc connect` to call `terminal.run`, `terminal.send`, `terminal.wait`, and `terminal.read`. The full prompt travels as a JSON string rather than a command-line argument, preserving Goldfish isolation and avoiding OS command-line limits. Agents remain alive if Poseidón closes or a request times out; controlled errors include the terminal address for `hc attach`.
 
 Missing executables, connection failures, JSON-RPC errors, empty output, and timeouts produce controlled errors. There is no silent fallback to a non-persistent subprocess when `fallback_to_subprocess` is `false`.
+
+### Textual TUI (v3.0)
+
+Launch the interactive terminal interface with:
+
+```bash
+poseidon tui
+```
+
+The Textual layout includes a header with the current state, a left panel with all Keel Nav phases, a right `RichLog` for streamed responses, and a footer with keyboard shortcuts. Select a phase and press **Ctrl+R** to execute it in a background worker; **Ctrl+Q** exits the application.
+
+Console output and the final response are forwarded to the RichLog without blocking the interface. API, local CLI, and Herdr executors are resolved through the same role configuration used by `poseidon run`.
 
 ### Graphify MCP (Optional)
 

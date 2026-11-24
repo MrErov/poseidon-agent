@@ -131,5 +131,13 @@ def run_phase(
         raise typer.Exit(code=1) from None
 
 
+@app.command("tui")
+def tui_command() -> None:
+    """Launch the interactive Textual interface."""
+    from poseidon.tui import PoseidonApp
+
+    PoseidonApp().run()
+
+
 if __name__ == "__main__":
     app()
