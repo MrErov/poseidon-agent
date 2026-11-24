@@ -15,6 +15,11 @@
   </p>
 </div>
 
+<div align="center">
+  <!-- Replace with actual GIF once recorded -->
+  <img src="docs/assets/tui-demo.gif" alt="Poseidon TUI Demo" width="800">
+</div>
+
 Poseidón is **the guided autonomous runtime for Keel Nav** — a **local-first AI agent with 3-layer cognitive memory**:
 
 - **Cold Memory:** Keel Nav phases and project specifications loaded from disk.
