@@ -5,6 +5,13 @@ phase: 1
 consumed_by: [01-sdd-spec-writer, 02-egm-goldfish-audit, 03-tdd-cycle, 05-drift-control]
 estimated_tokens_to_fill: 2000-4000
 max_lines: 120
+us_id: <US-ID>
+spec_version: 0.1.0
+created_by: 01-sdd-spec-writer
+created_at: <YYYY-MM-DD>
+status: draft
+goldfish_audit: pending
+drift_report: pending
 ---
 
 # SPEC: `<US-ID>` — <short User Story title>
@@ -130,20 +137,3 @@ Responses:
 
 **If any gate fails, the spec is NOT sent to Goldfish Audit.**
 Return to the Navigator with the failing gate and the reason.
-
----
-
-## 8. [M] Traceability Metadata
-
-```yaml
-# YAML guide: values containing ': ' must be quoted. Example:
-#   goldfish_audit: 'verdict: audited'
-#   note: 'status: implemented, drift_report: pending'
-us_id: <US-ID>
-spec_version: 0.1.0
-created_by: 01-sdd-spec-writer
-created_at: <YYYY-MM-DD>
-status: draft | audited | approved | implemented | observed | certified
-goldfish_audit: <path to audit.md or "pending">
-drift_report: <path to drift-report.md or "pending">
-```

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import litellm
+import yaml
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -15,12 +17,57 @@ from poseidon.delegator import DelegationError, LocalCLIDelegator
 from poseidon.herdr_delegator import HerdrDelegator
 from poseidon.mcp_client import fetch_graph_context
 
+
+class PoseidonError(Exception):
+    """Error controlado que puede presentarse directamente al usuario."""
+
+
+class InputValidationError(PoseidonError):
+    """Una fase, una ruta o un archivo de entrada no es válido."""
+
+
+class GateError(PoseidonError):
+    """La compuerta de validación impide ejecutar una fase TDD."""
+
+
+class CompletionError(PoseidonError):
+    """LiteLLM no pudo generar una respuesta utilizable."""
+
+
+class ArtifactSaveError(PoseidonError):
+    """No se pudo guardar un artefacto o un metadato generado por una fase."""
+
+
+class IllegalTransitionError(PoseidonError):
+    """Intento de transición de estado no permitida."""
+
+
+class SpecStatus(str, Enum):
+    """Estados válidos del ciclo de vida de una especificación."""
+
+    DRAFT = "draft"
+    AUDITED = "audited"
+    APPROVED = "approved"
+    OBSERVED = "observed"
+    CERTIFIED = "certified"
+
+
+# Transiciones permitidas: estado_origen -> {estados_destino_permitidos}
+_VALID_TRANSITIONS: dict[SpecStatus, set[SpecStatus]] = {
+    SpecStatus.DRAFT: {SpecStatus.AUDITED},
+    SpecStatus.AUDITED: {SpecStatus.APPROVED, SpecStatus.OBSERVED},
+    SpecStatus.APPROVED: {SpecStatus.OBSERVED, SpecStatus.CERTIFIED},
+    SpecStatus.OBSERVED: {SpecStatus.CERTIFIED},
+    SpecStatus.CERTIFIED: set(),
+}
+
+
 _PHASE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _STATUS_PATTERN = re.compile(
     r"^status[ \t]*:[ \t]*(?P<value>[^#\r\n]+?)[ \t]*(?:#.*)?$",
     re.IGNORECASE | re.MULTILINE,
 )
-_ALLOWED_GATE_STATUSES = {"audited", "approved"}
+_ALLOWED_GATE_STATUSES = {SpecStatus.AUDITED.value, SpecStatus.APPROVED.value}
 _LOCAL_EXECUTORS = {"claude-code", "codex", "opencode"}
 _PHASE_ALIASES: dict[str, str] = {
     "0": "00-context-bootstrap.md",
@@ -61,25 +108,8 @@ _OBSERVATION_VERDICT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-
-class PoseidonError(Exception):
-    """Error controlado que puede presentarse directamente al usuario."""
-
-
-class InputValidationError(PoseidonError):
-    """Una fase, una ruta o un archivo de entrada no es válido."""
-
-
-class GateError(PoseidonError):
-    """La compuerta de validación impide ejecutar una fase TDD."""
-
-
-class CompletionError(PoseidonError):
-    """LiteLLM no pudo generar una respuesta utilizable."""
-
-
-class ArtifactSaveError(PoseidonError):
-    """No se pudo guardar un artefacto o un metadato generado por una fase."""
+# Deprecated: mantenidos por compatibilidad con tests existentes que los importen
+# No se usan en el código de producción desde v3.1.0
 
 
 class PhaseRunner:
@@ -105,7 +135,6 @@ class PhaseRunner:
         herdr_agent: str | None = None,
     ) -> str:
         """Valida y ejecuta una fase, guardando su artefacto cuando corresponda."""
-        self.validate_gates(phase, spec_path or "")
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
             raise InputValidationError(f"Executor no soportado: '{executor}'.")
@@ -116,6 +145,9 @@ class PhaseRunner:
 
         phase_file = self._resolve_phase_file(phase)
         phase_kind = self._phase_kind(phase, phase_file)
+
+        # Validar gates usando el phase_kind resuelto, no el string crudo
+        self.validate_gates(phase_kind, spec_path or "")
         spec_file = Path(spec_path) if spec_path else None
         context_file = Path(context_path) if context_path else None
 
@@ -199,9 +231,10 @@ class PhaseRunner:
 
         return content
 
-    def validate_gates(self, phase: str, spec_path: str) -> None:
+    def validate_gates(self, phase_kind: str, spec_path: str) -> None:
         """Exige una especificación auditada o aprobada antes de una fase TDD."""
-        if phase != "2" and "tdd" not in phase.lower():
+        # Solo bloquear si el phase_kind resuelto es TDD
+        if phase_kind != "tdd":
             return
 
         if not spec_path or not Path(spec_path).is_file():
@@ -237,9 +270,12 @@ class PhaseRunner:
         if artifact_path is None:
             return None
 
+        # Limpiar fences de código Markdown (```markdown ... ```) que el LLM pueda añadir
+        clean_content = self._strip_markdown_fences(content)
+
         try:
             artifact_path.parent.mkdir(parents=True, exist_ok=True)
-            artifact_path.write_text(content, encoding="utf-8")
+            artifact_path.write_text(clean_content, encoding="utf-8")
         except OSError as exc:
             raise ArtifactSaveError(
                 f"No se pudo guardar el artefacto en {artifact_path}: {exc}"
@@ -251,6 +287,19 @@ class PhaseRunner:
             markup=False,
         )
         return artifact_path
+
+    @staticmethod
+    def _strip_markdown_fences(content: str) -> str:
+        """Elimina bloques de código Markdown (fences) que envuelven todo el contenido."""
+        stripped = content.strip()
+        # Patrón para detectar ```markdown ... ``` o ``` ... ``` al inicio y final
+        fence_pattern = re.compile(
+            r"^```(?:markdown|md)?\s*\n(.*?)\n```\s*$", re.DOTALL | re.IGNORECASE
+        )
+        match = fence_pattern.match(stripped)
+        if match:
+            return match.group(1)
+        return content
 
     @staticmethod
     def _is_goldfish_phase(phase: str) -> bool:
@@ -328,20 +377,32 @@ class PhaseRunner:
         if spec_path is None:
             return
 
+        # Leer el estado actual del spec desde el frontmatter
+        specification = self._read_file(spec_path, "el spec para actualizar su frontmatter")
+        frontmatter = self._extract_frontmatter(specification)
+        current_status_str = self._extract_status_from_frontmatter(frontmatter)
+
+        try:
+            current_status = SpecStatus(current_status_str)
+        except ValueError:
+            # Si el estado no es válido, tratamos como DRAFT por seguridad
+            current_status = SpecStatus.DRAFT
+
+        # Determinar el estado objetivo y validar la transición según el phase_kind
         if phase_kind == "goldfish":
-            if self._extract_verdict(report_content) != "audited":
+            verdict = self._extract_strict_verdict(report_content, "goldfish")
+            if verdict != "audited":
                 self.console.print(
                     "⚠️ Auditoría rechazada. El spec sigue en draft.",
                     style="yellow",
                     markup=False,
                 )
                 return
-            target_status = "audited"
+            target_status = SpecStatus.AUDITED
             report_field = "goldfish_audit"
-            only_if = "draft"
             success_message = "✅ Spec actualizado a status: audited"
         elif phase_kind == "odd":
-            verdict = self._extract_observation_verdict(report_content)
+            verdict = self._extract_strict_verdict(report_content, "odd")
             if verdict not in {"approved", "observed"}:
                 self.console.print(
                     "✅ Observación ODD guardada",
@@ -349,12 +410,11 @@ class PhaseRunner:
                     markup=False,
                 )
                 return
-            target_status = "observed"
+            target_status = SpecStatus.OBSERVED
             report_field = None
-            only_if = None
             success_message = "✅ Spec actualizado a status: observed"
         elif phase_kind == "drift":
-            verdict = self._extract_drift_verdict(report_content)
+            verdict = self._extract_strict_verdict(report_content, "drift")
             if verdict == "drifted":
                 self.console.print(
                     "❌ Drift rechazado. El spec no puede ser certificado",
@@ -370,13 +430,22 @@ class PhaseRunner:
                     markup=False,
                 )
                 return
-            target_status = "certified"
+            target_status = SpecStatus.CERTIFIED
             report_field = "drift_report"
-            only_if = None
             success_message = "✅ Drift certificado. Spec actualizado a status: certified"
         else:
             raise InputValidationError(
                 f"Tipo de fase no soportado para actualizar metadatos: {phase_kind}"
+            )
+
+        # Validar transición de estado permitida
+        allowed = _VALID_TRANSITIONS.get(current_status, set())
+        if target_status not in allowed:
+            allowed_str = ", ".join(s.value for s in allowed)
+            raise IllegalTransitionError(
+                "Transición de estado no permitida: "
+                f"{current_status.value} -> {target_status.value}. "
+                f"Transiciones válidas desde {current_status.value}: {allowed_str}"
             )
 
         if report_path is None:
@@ -387,9 +456,6 @@ class PhaseRunner:
             )
             return
 
-        specification = self._read_file(
-            spec_path, "el spec para actualizar su frontmatter"
-        )
         if self._split_frontmatter(specification) is None:
             self.console.print(
                 "⚠️ El spec no tiene frontmatter; no se actualizó su estado.",
@@ -401,8 +467,8 @@ class PhaseRunner:
         updated = self._set_frontmatter_field(
             specification,
             "status",
-            target_status,
-            only_if=only_if,
+            target_status.value,
+            only_if=current_status.value,
         )
         if report_field is not None:
             updated = self._set_frontmatter_field(
@@ -421,33 +487,36 @@ class PhaseRunner:
         self.console.print(success_message, style="green", markup=False)
 
     @staticmethod
-    def _extract_verdict(audit_content: str) -> str | None:
-        """Extrae el veredicto final; effective_verdict prevalece sobre verdict."""
-        verdicts: dict[str, str] = {}
-        for match in _VERDICT_PATTERN.finditer(audit_content):
-            verdicts[match.group("key").lower()] = match.group("verdict").lower()
-
-        return verdicts.get("effective_verdict") or verdicts.get("verdict")
-
-    @staticmethod
-    def _extract_drift_verdict(report_content: str) -> str | None:
-        """Extrae el veredicto Drift, dando prioridad a effective_verdict."""
-        verdicts: dict[str, str] = {}
-        for match in _DRIFT_VERDICT_PATTERN.finditer(report_content):
-            verdicts[match.group("key").lower()] = match.group("verdict").lower()
-        return verdicts.get("effective_verdict") or verdicts.get("verdict")
+    def _extract_status_from_frontmatter(frontmatter: str) -> str:
+        """Extrae el valor del campo 'status' del frontmatter YAML."""
+        match = _STATUS_PATTERN.search(frontmatter)
+        if match:
+            return match.group("value").strip().strip("\"'").lower() or "draft"
+        return "draft"
 
     @staticmethod
-    def _extract_observation_verdict(report_content: str) -> str | None:
-        """Extrae una aprobación ODD explícita sin inferirla del contexto."""
-        verdicts: dict[str, str] = {}
-        for match in _OBSERVATION_VERDICT_PATTERN.finditer(report_content):
-            verdicts[match.group("key").lower()] = match.group("verdict").lower()
-        return (
-            verdicts.get("effective_verdict")
-            or verdicts.get("verdict")
-            or verdicts.get("status")
-        )
+    def _extract_strict_verdict(report_content: str, phase_kind: str) -> str | None:
+        """
+        Extrae el veredicto ÚNICAMENTE del frontmatter del reporte (primer bloque --- ... ---).
+        Usa yaml.safe_load para parsing estricto. No busca en texto libre.
+        """
+        parts = PhaseRunner._split_frontmatter(report_content)
+        if parts is None:
+            return None
+
+        _, frontmatter_body, _ = parts
+        try:
+            data = yaml.safe_load(frontmatter_body) or {}
+        except yaml.YAMLError:
+            return None
+
+        # Buscar claves de veredicto en orden de prioridad
+        for key in ("effective_verdict", "verdict", "status"):
+            if key in data:
+                value = str(data[key]).strip().lower()
+                if value:
+                    return value
+        return None
 
     @classmethod
     def _set_frontmatter_field(
