@@ -3,15 +3,16 @@
   <h1>🔱 Poseidon Agent</h1>
   <p><strong>The guided autonomous runtime for Keel Nav.</strong></p>
   <p>
-    <a href="https://github.com/MrErov/poseidon-agent/releases/tag/v1.0.0-alpha">
-      <img alt="GitHub release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&amp;sort=semver" />
+    <a href="https://github.com/MrErov/poseidon-agent/releases/tag/v3.3.0">
+      <img alt="GitHub release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/blob/main/pyproject.toml">
       <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests: 63 passed" src="https://img.shields.io/badge/tests-63%20passed-brightgreen.svg" />
+      <img alt="Tests: 71 passed" src="https://img.shields.io/badge/tests-71%20passed-brightgreen.svg" />
     </a>
+    <img alt="Status: Production Ready" src="https://img.shields.io/badge/status-Production%20Ready-success.svg" />
   </p>
 </div>
 
@@ -265,5 +266,21 @@ src/poseidon/
 ├── herdr_delegator.py  # Persistent agents through herdr-core JSON-RPC
 ├── main.py             # Typer CLI and error handling
 ├── mcp_client.py       # Optional Graphify MCP integration
+├── prompt_builder.py   # Hot memory construction
+├── spec_state_machine.py # Spec state & frontmatter I/O
+├── execution_engine.py # LLM/CLI/Herdr execution
+├── types.py            # Shared types (SpecStatus, transitions)
+├── exceptions.py       # Centralized exception hierarchy
 └── __init__.py
 ```
+
+## Changelog Highlights
+
+- **v3.3.0** — Production-Ready Architecture: decoupled PhaseRunner into `SpecStateMachine`, `PromptBuilder`, `ExecutionEngine`; added atomic persistence, strict config validation (`ConfigValidationError`), and public API exports.
+- **v3.2.0** — TUI inputs, Herdr JSON-RPC hardening, 300s LiteLLM timeout, `Ctrl+X` cancellation.
+- **v3.1.0** — Secure Gatekeeper (no bypass via aliases), strict state transitions (`SpecStatus` enum), frontmatter-only verdict extraction (prompt injection fix).
+- **v1.0.0-alpha** — Initial deterministic execution engine for Keel Nav.
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
