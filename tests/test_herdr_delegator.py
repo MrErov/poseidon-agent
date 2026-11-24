@@ -57,7 +57,7 @@ def test_herdr_executes_full_json_rpc_lifecycle() -> None:
     assert requests[0]["params"]["argv"] == ["claude"]
     assert requests[0]["params"]["wait"] is False
     assert requests[0]["params"]["outlive_parent"] is True
-    assert requests[1]["params"]["text"] == "large prompt"
+    assert requests[1]["params"]["text"] == "large prompt\n"
     assert requests[3]["params"]["terminal"] == "t42"
 
 

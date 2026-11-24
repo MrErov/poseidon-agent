@@ -89,10 +89,11 @@ class HerdrDelegator:
         if not isinstance(address, str) or not address:
             raise DelegationError("Herdr did not return a terminal address.")
 
+        prompt_with_enter = prompt if prompt.endswith("\n") else prompt + "\n"
         try:
             self._call(
                 "terminal.send",
-                {"terminal": address, "text": prompt, "wait": False},
+                {"terminal": address, "text": prompt_with_enter, "wait": False},
             )
             wait_result = self._call(
                 "terminal.wait",

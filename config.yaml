@@ -5,7 +5,7 @@ roles:
     executor: api
     model: nvidia_nim/moonshotai/kimi-k2-instruct
   tester:
-    executor: claude-code
+    executor: opencode
     model: null
     runtime: herdr
     name_prefix: poseidon-tester
@@ -20,7 +20,7 @@ phase_roles:
 
 herdr:
   executable: hc
-  wait_timeout_seconds: 180
+  wait_timeout_seconds: 900
   read_lines: 1000
   keep: true
   outlive_parent: true

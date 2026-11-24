@@ -158,7 +158,7 @@ phase_roles:
   4: architect
 herdr:
   executable: hc
-  wait_timeout_seconds: 180
+  wait_timeout_seconds: 900
   read_lines: 1000
   keep: true
   outlive_parent: true
@@ -179,6 +179,8 @@ Run a configured role or select Herdr explicitly:
 poseidon run --phase 1b --role tester
 poseidon run --phase 1b --executor herdr --herdr-agent codex
 ```
+
+Poseidón appends a newline to the prompt when needed, ensuring terminal-based agents submit it as if Enter had been pressed. The default Herdr wait timeout is 900 seconds.
 
 Poseidón uses JSON-RPC 2.0 over `hc connect` to call `terminal.run`, `terminal.send`, `terminal.wait`, and `terminal.read`. The full prompt travels as a JSON string rather than a command-line argument, preserving Goldfish isolation and avoiding OS command-line limits. Agents remain alive if Poseidón closes or a request times out; controlled errors include the terminal address for `hc attach`.
 
