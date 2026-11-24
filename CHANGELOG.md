@@ -2,6 +2,18 @@
 
 All notable changes to Poseidon Agent will be documented in this file.
 
+## [3.2.0] - 2026-11-24
+### Fixed
+- **B4 TUI Improvements**: Added `Input` widgets for Spec Path and Context Path. Phase execution now reads these inputs and passes them to `PhaseRunner.run()`. Herdr console output now routes through TUI's `_MessageText` adapter (no more screen corruption). Removed duplicate output rendering.
+- **B5 Herdr JSON-RPC Hardening**: Strict validation that `result` and `error` are dicts before field access. Added `_get_str_field()` and `_get_bool_field()` helpers. `terminal.read` now verifies `complete=true` to detect truncated reads.
+- **B6 Timeouts & Cancellation**: LiteLLM `completion()` now uses 300s timeout. Added `Ctrl+X` binding to cancel running worker (and Herdr terminal if applicable).
+
+### Added
+- TUI: Spec/Context path inputs, cancellation support, non-markup RichLog.
+- Herdr: Strict JSON-RPC response validation, incomplete-read detection.
+- Core: 300s timeout on LiteLLM calls.
+- Tests for Herdr non-dict result/error, incomplete reads, empty address/text.
+
 ## [3.1.0] - 2026-11-24
 ### Fixed
 - **B1 Gatekeeper Bypass**: Gatekeeper now validates using resolved `phase_kind` instead of raw phase string. Aliases like `03`, ` 2`, `tdd` are now properly blocked for draft specs.

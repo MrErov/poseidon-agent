@@ -142,3 +142,65 @@ def test_herdr_from_settings() -> None:
     assert delegator.keep is False
     assert delegator.outlive_parent is False
     assert delegator.name_prefix == "tester"
+
+
+def test_herdr_rejects_non_dict_result() -> None:
+    """JSON-RPC result must be a dict; string/list results are rejected."""
+    # terminal.run returns a string instead of an object
+    bad_result = json.dumps({"jsonrpc": "2.0", "id": 1, "result": "not-a-dict"}) + "\n"
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=_process(bad_result)):
+        with pytest.raises(DelegationError, match="invalid result"):
+            HerdrDelegator().execute("prompt", "claude-code")
+
+
+def test_herdr_rejects_non_dict_error() -> None:
+    """JSON-RPC error must be a dict; string errors are rejected."""
+    bad_error = json.dumps({"jsonrpc": "2.0", "id": 1, "error": "just a string"}) + "\n"
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=_process(bad_error)):
+        with pytest.raises(DelegationError, match="invalid error"):
+            HerdrDelegator().execute("prompt", "claude-code")
+
+
+def test_herdr_rejects_incomplete_read() -> None:
+    """terminal.read with complete=false should raise DelegationError."""
+    processes = [
+        _process(_rpc({"address": "t42"})),
+        _process(_rpc({"turn": 1}, request_id=2)),
+        _process(_rpc({"ended": True, "exit_code": 0}, request_id=3)),
+        # read_result with complete=False
+        _process(_rpc({"text": "partial output", "complete": False}, request_id=4)),
+    ]
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", side_effect=processes):
+        with pytest.raises(DelegationError, match="truncated|complete"):
+            HerdrDelegator().execute("prompt", "claude-code")
+
+
+def test_herdr_rejects_empty_address() -> None:
+    """terminal.run returning empty address should fail."""
+    bad_result = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"address": ""}}) + "\n"
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=_process(bad_result)):
+        with pytest.raises(DelegationError, match="terminal address"):
+            HerdrDelegator().execute("prompt", "claude-code")
+
+
+def test_herdr_rejects_missing_address_field() -> None:
+    """terminal.run missing address field should fail."""
+    bad_result = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}}) + "\n"
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=_process(bad_result)):
+        with pytest.raises(DelegationError, match="terminal address"):
+            HerdrDelegator().execute("prompt", "claude-code")
+
+
+def test_herdr_rejects_empty_text_output() -> None:
+    """terminal.read returning empty text should fail."""
+    processes = [
+        _process(_rpc({"address": "t42"})),
+        _process(_rpc({"turn": 1}, request_id=2)),
+        _process(_rpc({"ended": True, "exit_code": 0}, request_id=3)),
+        _process(_rpc({"text": "", "complete": True}, request_id=4)),
+    ]
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", side_effect=processes):
+        with pytest.raises(DelegationError, match="empty output|remains available"):
+            HerdrDelegator().execute("prompt", "claude-code")

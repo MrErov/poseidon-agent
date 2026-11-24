@@ -89,9 +89,9 @@ class HerdrDelegator:
                 "keep": self.keep,
             },
         )
-        address = run_result.get("address")
-        if not isinstance(address, str) or not address:
-            raise DelegationError("Herdr did not return a terminal address.")
+        address = self._get_str_field(
+            run_result, "address", "Herdr did not return a terminal address."
+        )
 
         prompt_with_enter = prompt if prompt.endswith("\n") else prompt + "\n"
         try:
@@ -112,7 +112,8 @@ class HerdrDelegator:
                 "terminal.wait",
                 {"terminal": address, "timeout": self.wait_timeout_seconds},
             )
-            if not wait_result.get("ended", False):
+            ended = self._get_bool_field(wait_result, "ended", False)
+            if not ended:
                 raise DelegationError(
                     f"Herdr terminal {address} is still running; "
                     f"attach with `hc attach {address}`."
@@ -128,8 +129,16 @@ class HerdrDelegator:
                     f"Herdr terminal {address} exited with code {exit_code}."
                 )
 
-            output = read_result.get("text", "")
-            if not isinstance(output, str) or not output.strip():
+            # Verify the read is complete
+            complete = self._get_bool_field(read_result, "complete", False)
+            if not complete:
+                raise DelegationError(
+                    f"Herdr terminal {address} read was truncated (complete=false). "
+                    f"Output may be incomplete."
+                )
+
+            output = self._get_str_field(read_result, "text", "")
+            if not output.strip():
                 raise DelegationError(f"Herdr terminal {address} returned empty output.")
             return output
         except DelegationError as exc:
@@ -137,6 +146,26 @@ class HerdrDelegator:
                 f"{exc} Terminal {address} remains available; "
                 f"inspect it with `hc attach {address}`."
             ) from exc
+
+    @staticmethod
+    def _get_str_field(data: Any, field: str, error_msg: str) -> str:
+        """Safely extract a string field from a JSON-RPC result dict."""
+        if not isinstance(data, dict):
+            raise DelegationError(f"Expected dict for JSON-RPC result, got {type(data).__name__}")
+        value = data.get(field)
+        if not isinstance(value, str) or not value:
+            raise DelegationError(error_msg)
+        return value
+
+    @staticmethod
+    def _get_bool_field(data: Any, field: str, default: bool = False) -> bool:
+        """Safely extract a boolean field from a JSON-RPC result dict."""
+        if not isinstance(data, dict):
+            raise DelegationError(f"Expected dict for JSON-RPC result, got {type(data).__name__}")
+        value = data.get(field)
+        if isinstance(value, bool):
+            return value
+        return default
 
     def _call(self, method: str, params: Mapping[str, Any]) -> Any:
         """Send one JSON-RPC request and return its matching result."""
@@ -196,9 +225,19 @@ class HerdrDelegator:
             if message.get("id") != request_id:
                 continue
             if "error" in message:
-                raise self._rpc_error(method, message["error"])
+                error = message["error"]
+                if not isinstance(error, dict):
+                    raise DelegationError(
+                        f"Herdr {method} returned invalid error (not an object): {error}"
+                    )
+                raise self._rpc_error(method, error)
             if "result" in message:
-                return message["result"]
+                result = message["result"]
+                if not isinstance(result, dict):
+                    raise DelegationError(
+                        f"Herdr {method} returned invalid result (not an object): {result}"
+                    )
+                return result
 
         raise DelegationError(
             f"Herdr returned no matching response for '{method}'."

@@ -200,6 +200,7 @@ class PhaseRunner:
                     model=model_name,
                     messages=messages,
                     temperature=0.0,
+                    timeout=300,
                 )
             except Exception as exc:
                 raise CompletionError(
