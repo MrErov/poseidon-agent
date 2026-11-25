@@ -2,6 +2,14 @@
 
 All notable changes to Poseidon Agent will be documented in this file.
 
+## [3.4.0] - 2026-11-24
+### Added
+- **VHS demo script** (`demo.tape`) to regenerate `docs/assets/tui-demo.gif` with a dark Dracula theme.
+- **Keel Nav README** (`docs/keel-nav/README.md`) with the "Two Ways to Sail" comparison and a cross-link to Poseidón.
+
+### Changed
+- Redesigned product-style `README.md`: hero with version/tests/license badges, demo GIF, "Why Poseidon?" comparison table and an architecture diagram centered on `CLI/TUI → SpecStateMachine → ExecutionEngine (API/Herdr)`.
+
 ## [3.3.0] - 2026-11-24
 ### Refactored
 - **W1 God Object**: Split `PhaseRunner` into three cohesive classes:
