@@ -65,6 +65,7 @@ class ConfigManager:
         "launch": "headless_in_terminal",
         "agent_model": "",
         "agent_args": [],
+        "auto_approve": True,
     }
     _HERDR_TYPES = {
         "executable": str,
@@ -78,6 +79,7 @@ class ConfigManager:
         "launch": str,
         "agent_model": str,
         "agent_args": list,
+        "auto_approve": bool,
     }
 
     def __init__(self, config_path: str | Path | None = None) -> None:
@@ -107,6 +109,8 @@ class ConfigManager:
         if selected_role is None:
             executor = cli_executor or "api"
             self._validate_executor(executor)
+            if executor == "herdr" and cli_model:
+                base_herdr["agent_model"] = cli_model
             return ExecutionConfig(
                 role=None,
                 executor=executor,
@@ -138,6 +142,13 @@ class ConfigManager:
 
         herdr = self._HERDR_DEFAULTS | dict(data.get("herdr", {}) or {})
         herdr.update(role_settings.get("herdr", {}) or {})
+        if executor == "herdr":
+            herdr["agent_model"] = (
+                cli_model
+                or role_settings.get("agent_model")
+                or role_settings.get("model")
+                or herdr.get("agent_model", "")
+            )
         if role_settings.get("name_prefix"):
             herdr["name_prefix"] = role_settings["name_prefix"]
 

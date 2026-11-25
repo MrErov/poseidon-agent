@@ -6,7 +6,7 @@ roles:
     model: nvidia_nim/moonshotai/kimi-k2-instruct
   tester:
     executor: opencode
-    model: null
+    model: nvidia/nvidia/nemotron-3-ultra-550b-a55b
     runtime: herdr
     name_prefix: poseidon-tester
 
@@ -28,3 +28,4 @@ herdr:
   launch: headless_in_terminal
   agent_model: ""
   agent_args: []
+  auto_approve: true

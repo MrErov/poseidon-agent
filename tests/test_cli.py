@@ -196,3 +196,23 @@ herdr:
     from_settings.assert_called_once()
     assert herdr.execute.call_args.args[1] == "claude-code"
     completion.assert_not_called()
+
+
+def test_cli_debug_flag_reaches_herdr_delegator(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "00-context-bootstrap.md").write_text("Map repository", encoding="utf-8")
+    herdr = Mock()
+    herdr.execute.return_value = "## Context map"
+
+    with (
+        patch("poseidon.main.HerdrDelegator.from_settings", return_value=herdr) as from_settings,
+        patch("poseidon.core.litellm.completion") as completion,
+    ):
+        result = cli.invoke(app, ["run", "--phase", "0", "--executor", "herdr", "--debug"])
+
+    assert result.exit_code == 0, result.output
+    from_settings.assert_called_once()
+    assert from_settings.call_args.kwargs["debug"] is True
+    completion.assert_not_called()

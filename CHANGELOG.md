@@ -1,7 +1,15 @@
-## [3.5.1] - 2026-11-24
+## [3.5.2] - 2026-11-24
 ### Fixed
-- **Headless-in-terminal default:** launch non-interactive agents with `terminal.run(line=...)`, `terminal.wait`, and `terminal.read` for deterministic completion instead of waiting for a TUI turn that may never be reported.
-- **Real interactive caller:** `terminal.send` and fallback `terminal.wait` now use the actual terminal address as `caller`, not a synthetic identifier.
+- **OpenCode non-interactive execution:** `headless_in_terminal` now appends `--auto` by default, auto-approving permissions not explicitly denied (dangerous). Set `auto_approve: false` to require manual permission prompts.
+- **Model fallback:** `agent_model` is used first, then the role's `model`, then the CLI `--model`, preventing empty-model fallback to invalid OpenCode defaults.
+- **Debuggability:** `poseidon run --debug` prints exact Herdr commands, JSON-RPC responses, terminal IDs, and `hc attach <id>` instructions while leaving terminals alive for inspection.
+- **RPC diagnostics:** `_HerdrSession` logs outgoing requests and matching responses with optional prompt/response content warnings.
+
+### Added
+- `herdr.auto_approve` configuration with boolean validation and `auto_approve: true` in `config.yaml`.
+- Tests for RPC and terminal debug output, disabled debug mode, `--auto`, model fallback, config validation, and CLI debug propagation.
+- README debug guidance, auto-approve risk note, and model precedence documentation.
+
 - **Prompt-file safety:** prompts are written to `.poseidon/tmp/<uuid>.prompt.md` and removed in `finally`, with `.poseidon/tmp/` ignored by Git.
 - **Model handling:** `herdr.agent_model` adds `--model "<model>"`; `herdr.agent_args` appends extra arguments. Paths with spaces are quoted.
 - **Windows UTF-8:** shared `poseidon.console.configure_utf8_output()` reconfigures legacy cp1252 streams before delegator messages, preventing `UnicodeEncodeError` outside the CLI.

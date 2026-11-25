@@ -76,6 +76,13 @@ def run_phase(
         str | None,
         typer.Option("--herdr-agent", help="Agent used when executor is herdr."),
     ] = None,
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug/--no-debug",
+            help="Enable JSON-RPC and terminal debug output.",
+        ),
+    ] = False,
 ) -> None:
     """Ejecuta una fase mediante LiteLLM o un CLI local."""
     _configure_utf8_output()
@@ -103,7 +110,7 @@ def run_phase(
 
     try:
         herdr_delegator = (
-            HerdrDelegator.from_settings(execution.herdr)
+            HerdrDelegator.from_settings(execution.herdr, debug=debug)
             if executor == "herdr"
             else None
         )

@@ -403,7 +403,9 @@ def test_headless_terminal_uses_run_wait_read_and_cleans_prompt(tmp_path: Path) 
         "terminal.wait",
         "terminal.read",
     ]
-    assert requests[0]["params"]["line"].startswith("opencode run < ")
+    line = requests[0]["params"]["line"]
+    assert line.startswith("opencode run ")
+    assert " < " in line
     assert not _prompt_path(process).exists()
     monkeypatch.undo()
 
@@ -537,3 +539,67 @@ def test_interactive_fallback_wait_uses_real_terminal_address() -> None:
     requests = _requests(process)
     assert requests[2]["params"]["caller"] == "t42"
     assert requests[3]["params"]["caller"] == "t42"
+
+
+def test_debug_logs_rpc_and_keeps_terminal_available(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _headless_terminal_process()
+    console = Mock()
+    delegator = HerdrDelegator(debug=True, console=console)
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        assert delegator.execute("prompt", "opencode") == "PONG"
+
+    messages = [call.args[0] for call in console.print.call_args_list]
+    assert any("herdr-rpc" in message for message in messages)
+    assert any("t42" in message and "hc attach t42" in message for message in messages)
+    assert all("hc kill" not in message and "hc rm" not in message for message in messages)
+    monkeypatch.undo()
+
+
+def test_debug_disabled_does_not_log_rpc(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _headless_terminal_process()
+    console = Mock()
+    delegator = HerdrDelegator(debug=False, console=console)
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        delegator.execute("prompt", "opencode")
+
+    messages = [call.args[0] for call in console.print.call_args_list]
+    assert all("herdr-rpc" not in message for message in messages)
+    monkeypatch.undo()
+
+
+def test_headless_auto_approve_and_model_flags(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _headless_terminal_process()
+    delegator = HerdrDelegator(
+        agent_model="nvidia/test-model",
+        auto_approve=True,
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        delegator.execute("prompt", "opencode")
+
+    line = _requests(process)[0]["params"]["line"]
+    assert '--model "nvidia/test-model"' in line
+    assert "--auto" in line
+    monkeypatch.undo()
+
+
+def test_auto_approve_can_be_disabled(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _headless_terminal_process()
+    delegator = HerdrDelegator(auto_approve=False)
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        delegator.execute("prompt", "opencode")
+
+    line = _requests(process)[0]["params"]["line"]
+    assert "--auto" not in line
+    monkeypatch.undo()

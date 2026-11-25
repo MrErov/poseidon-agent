@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.1-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.2-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-115%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-123%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -159,7 +159,7 @@ All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Overr
 version: 2
 roles:
   architect: { executor: api, model: nvidia_nim/moonshotai/kimi-k2-instruct }
-  tester:    { executor: opencode, model: null, runtime: herdr, name_prefix: poseidon-tester }
+  tester:    { executor: opencode, model: nvidia/nvidia/nemotron-3-ultra-550b-a55b, runtime: herdr, name_prefix: poseidon-tester }
 phase_roles:
   0: architect
   1a: architect
@@ -177,11 +177,16 @@ herdr:
   launch: headless_in_terminal  # interactive | headless_in_terminal
   agent_model: ""  # optional; adds --model "<model>" when set
   agent_args: []   # extra CLI arguments appended to the agent command
+  auto_approve: true  # adds --auto to OpenCode; set false for manual permission prompts
 ```
 
 Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses one JSON-RPC 2.0 session per run over `hc connect`, with a stable caller identity and strict response validation.
 
-**Headless-in-terminal (default):** Poseidon writes the prompt to `.poseidon/tmp/<uuid>.prompt.md`, starts a non-interactive command with `terminal.run`, waits for the command to exit with `terminal.wait`, and retrieves the response with `terminal.read`. Prompt files are always deleted in `finally`; `.poseidon/tmp/` is gitignored. Shell redirection keeps prompt contents out of Windows' 8191-character command-line limit. Set `herdr.agent_model` to add `--model "<model>"`; `agent_args` appends extra arguments. Paths with spaces are quoted.
+**Headless-in-terminal (default):** Poseidon writes the prompt to `.poseidon/tmp/<uuid>.prompt.md`, starts a non-interactive command with `terminal.run`, waits for the command to exit with `terminal.wait`, and retrieves the response with `terminal.read`. Prompt files are always deleted in `finally`; `.poseidon/tmp/` is gitignored. Shell redirection keeps prompt contents out of Windows' 8191-character command-line limit. Set `herdr.agent_model` to add `--model "<model>"`; `agent_args` appends extra arguments. Paths with spaces are quoted. OpenCode also receives `--auto` by default, auto-approving permissions not explicitly denied (dangerous). Set `auto_approve: false` to require manual permission prompts.
+
+**Model selection:** `herdr.agent_model` takes precedence. If it is empty, Poseidon uses the role's `model`, then an explicit `--model` CLI value. This prevents an empty model from silently falling back to an invalid OpenCode default.
+
+**Debug logging:** add `--debug` to print the exact command sent to `hc connect`, JSON-RPC responses, the terminal ID, and the command to attach with `hc attach <id>`. Debug terminals remain alive for inspection; no `hc kill` or `hc rm` is issued by debug mode. Logs may include prompt and response content, so enable them only for local troubleshooting.
 
 **Interactive (experimental):** the existing TUI flow uses `terminal.send(wait: true)` with the **real terminal address as caller**, falling back to `terminal.wait` with the same address. This requires an agent that reports status to Herdr. OpenCode's TUI may report no status and no turn, so an interactive agent that answers and remains open cannot be waited on reliably. Use `launch: headless_in_terminal` for deterministic completion.
 
@@ -254,6 +259,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.5.2** — OpenCode execution unblocking: RPC debug logs, `--debug`, model fallback, and non-interactive `--auto` handling.
 - **v3.5.1** — Headless-in-terminal delegation: prompt files, real interactive caller, explicit model handling, and Windows UTF-8 safety.
 - **v3.5.0** — Herdr turn semantics: persistent JSON-RPC sessions, turn-aware waits, headless machine execution, and strict mode/config validation.
 - **v3.4.0** — Marketing Release: product-style READMEs, VHS demo script and Keel Nav protocol README.

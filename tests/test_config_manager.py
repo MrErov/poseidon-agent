@@ -227,3 +227,39 @@ def test_agent_args_must_be_a_list(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigValidationError, match="agent_args"):
         ConfigManager(config).resolve("1b")
+
+
+def test_role_model_is_used_as_herdr_agent_model(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "    model: null", "    model: nvidia/test-model"
+        ),
+        encoding="utf-8",
+    )
+
+    result = ConfigManager(config).resolve("1b")
+
+    assert result.herdr["agent_model"] == "nvidia/test-model"
+
+
+def test_cli_model_overrides_role_agent_model(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+
+    result = ConfigManager(config).resolve(
+        "1b", cli_model="nvidia/custom-model"
+    )
+
+    assert result.herdr["agent_model"] == "nvidia/custom-model"
+
+
+def test_auto_approve_must_be_boolean(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  auto_approve: 'yes'\n")
+
+    with pytest.raises(ConfigValidationError, match="auto_approve"):
+        ConfigManager(config).resolve("1b")

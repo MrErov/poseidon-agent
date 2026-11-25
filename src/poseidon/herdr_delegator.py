@@ -104,11 +104,13 @@ class _HerdrSession:
             "params": dict(params),
         }
         payload = json.dumps(request, ensure_ascii=False) + "\n"
+        self.delegator._debug_log("→", payload)
         timeout = self.delegator._timeout_for(method)
         try:
             self.process.stdin.write(payload)
             self.process.stdin.flush()
         except (OSError, ValueError) as exc:
+            self._check_process_exit(method)
             raise DelegationError(f"Could not write to 'hc connect': {exc}") from exc
 
         while True:
@@ -133,6 +135,7 @@ class _HerdrSession:
                 continue
             if not isinstance(message, dict) or message.get("id") != request_id:
                 continue
+            self.delegator._debug_log("←", item)
             if "error" in message:
                 raise self.delegator._rpc_error(method, message["error"])
             if "result" not in message:
@@ -186,6 +189,8 @@ class HerdrDelegator:
         launch: str = "headless_in_terminal",
         agent_model: str = "",
         agent_args: list[str] | None = None,
+        auto_approve: bool = True,
+        debug: bool = False,
     ) -> None:
         if wait_timeout_seconds <= 0 or connection_timeout_seconds <= 0:
             raise ValueError("Herdr timeouts must be greater than zero")
@@ -211,10 +216,16 @@ class HerdrDelegator:
         self.launch = launch
         self.agent_model = agent_model.strip()
         self.agent_args = list(agent_args or [])
+        self.auto_approve = auto_approve
+        self.debug = debug
         self._request_id = 0
 
     @classmethod
-    def from_settings(cls, settings: Mapping[str, Any] | None = None) -> HerdrDelegator:
+    def from_settings(
+        cls,
+        settings: Mapping[str, Any] | None = None,
+        debug: bool = False,
+    ) -> HerdrDelegator:
         """Build a delegator from the Herdr section of config.yaml."""
         values = dict(settings or {})
         return cls(
@@ -231,6 +242,8 @@ class HerdrDelegator:
             launch=str(values.get("launch", "headless_in_terminal")),
             agent_model=str(values.get("agent_model", "")),
             agent_args=list(values.get("agent_args", [])),
+            auto_approve=bool(values.get("auto_approve", True)),
+            debug=debug,
         )
 
     def execute(self, prompt: str, cli_type: str) -> str:
@@ -250,6 +263,24 @@ class HerdrDelegator:
             if self.launch == "headless_in_terminal":
                 return self._execute_headless_terminal(session, prompt, normalized_cli)
             return self._execute_persistent(session, prompt, normalized_cli)
+
+    def _debug_log(self, direction: str, payload: str) -> None:
+        if self.debug:
+            self.console.print(
+                f"[herdr-rpc {direction}] {payload.strip()}",
+                style="dim",
+                markup=False,
+            )
+
+    def _debug_terminal(self, address: str) -> None:
+        if self.debug:
+            self.console.print(f"🐛 Herdr terminal: {address}", style="cyan", markup=False)
+            self.console.print(
+                f"Open another terminal and run: hc attach {address} "
+                "to see what is happening",
+                style="yellow",
+                markup=False,
+            )
 
     def _execute_persistent(
         self, session: _HerdrSession, prompt: str, cli_type: str
@@ -271,6 +302,7 @@ class HerdrDelegator:
         if not isinstance(address, str) or not address:
             raise DelegationError("Herdr did not return a terminal address.")
 
+        self._debug_terminal(address)
         self._print_wait_feedback(address)
         try:
             send_result = session.call(
@@ -321,6 +353,7 @@ class HerdrDelegator:
         prompt_path = self._write_prompt_file(prompt)
         address = "unknown"
         try:
+            self._debug_log("→", self._headless_command_line(prompt_path, cli_type))
             run_result = session.call(
                 "terminal.run",
                 {
@@ -337,6 +370,7 @@ class HerdrDelegator:
             if not isinstance(address, str) or not address:
                 raise DelegationError("Herdr did not return a terminal address.")
 
+            self._debug_terminal(address)
             self._print_wait_feedback(address)
             wait_result = session.call(
                 "terminal.wait",
@@ -394,6 +428,8 @@ class HerdrDelegator:
         if self.agent_model:
             command_parts.append(f'--model "{self.agent_model}"')
         command_parts.extend(self.agent_args)
+        if self.auto_approve and cli_type == "opencode":
+            command_parts.append("--auto")
         command = " ".join(command_parts)
         return f"{command} < {subprocess.list2cmdline([str(prompt_path)])}"
 
