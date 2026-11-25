@@ -1,12 +1,29 @@
 <div align="center">
-  <img src="docs/assets/logo.png" alt="Poseidon Agent logo with trident" width="200">
+  <img src="docs/assets/logo.png" alt="Poseidon Agent Logo" width="180">
   <h1>🔱 Poseidon Agent</h1>
-  <p><strong>The guided autonomous runtime for Keel Nav. A local-first AI agent with 3-layer cognitive memory.</strong></p>
+  <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-v3.4.0-blue.svg" />
-    <img alt="Tests" src="https://img.shields.io/badge/tests-71%20passing-brightgreen.svg" />
-    <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
-    <img alt="Status" src="https://img.shields.io/badge/status-Production%20Ready-success.svg" />
+    <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.4.0-blue.svg" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
+      <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/blob/main/LICENSE">
+      <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
+      <img alt="Tests" src="https://img.shields.io/badge/tests-71%20passing-brightgreen.svg" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
+      <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/issues">
+      <img alt="Issues" src="https://img.shields.io/github/issues/MrErov/poseidon-agent" />
+    </a>
+    <a href="https://github.com/MrErov/poseidon-agent/stargazers">
+      <img alt="Stars" src="https://img.shields.io/github/stars/MrErov/poseidon-agent?style=social" />
+    </a>
   </p>
 </div>
 
@@ -16,20 +33,32 @@
 
 Poseidón is the deterministic execution engine for the **Keel Nav** protocol. It turns a guided map into auditable software: it isolates memory, delegates inference, persists artifacts and enforces state transitions — the Navigator stays in control of every step.
 
-## Why Poseidon?
+---
 
-| | Free-loop Agents (Hermes, etc.) | Poseidon Agent |
-|---|---|---|
-| **Memory** | Conversation history grows unbounded; context drifts between turns. | **3-layer cognitive memory**: immutable Cold Memory on disk, a fresh Hot Memory per run, and Context/Graph Memory injected only where needed. |
-| **Validation** | The agent self-reports success; no deterministic gate. | **Gatekeeper + strict state machine**: TDD is blocked until a spec is `audited`/`approved`; verdicts are parsed only from a report frontmatter, never from free text. |
-| **Orchestration** | The model improvises the next action. | **The map rules**: a thin orchestrator coordinates `SpecStateMachine`, `PromptBuilder` and `ExecutionEngine`. Every transition is explicit, typed and atomic. |
+## 🎯 Why Poseidon?
 
-## 4 Pillars
+| | Free-Loop Agents (Hermes, AutoGPT, etc.) | **Poseidon Agent** |
+|:---|:---|:---|
+| **Memory** | Unbounded conversation history; context drifts between turns | **3-Layer Cognitive Memory**: Immutable Cold Memory on disk, fresh Hot Memory per run, Context/Graph Memory injected only where needed |
+| **Validation** | Self-reports success; no deterministic gate | **Gatekeeper + Strict State Machine**: TDD blocked until spec is `audited`/`approved`; verdicts parsed only from report frontmatter |
+| **Orchestration** | Model improvises next action | **The Map Rules**: Thin orchestrator coordinates `SpecStateMachine`, `PromptBuilder`, `ExecutionEngine` |
+| **Auditability** | Opaque decision trail | **Full Traceability**: Every phase produces immutable artifacts; every transition logged and verifiable |
+| **Control** | Agent decides next step | **Human-in-the-Loop**: Gatekeeper blocks unapproved work; Navigator authorizes every phase transition |
 
-- **Guided 5-Phase Engine (Keel Nav native):** Context Bootstrap, Spec Writer, Goldfish Audit, Strict TDD, ODD Vertical Slice and Drift Control, guarded by deterministic transitions.
-- **Full Local & OS Agency:** persistent Herdr terminals, local CLIs and isolated subprocesses — no shell, prompts via stdin.
-- **Human-in-the-Loop:** the Gatekeeper blocks unapproved work; artifacts and verdicts keep every decision inspectable.
-- **Multi-Channel:** CLI and an interactive Textual TUI today, future desktop channels.
+> **Poseidon doesn't replace the Navigator—it makes the Navigator's intent executable and verifiable.**
+
+> **Poseidon doesn't replace the Navigator—it makes the Navigator's intent executable and verifiable.**
+
+---
+
+## 🏛️ Four Pillars of Poseidon
+
+| Pillar | Description |
+|--------|-------------|
+| **🎯 Guided 5-Phase Engine** (Keel Nav Native) | Context Bootstrap → Spec Writer → Goldfish Audit → Strict TDD → ODD Vertical Slice → Drift Control. Every phase gated by deterministic transitions. |
+| **🏠 Full Local & OS Agency** | Persistent Herdr terminals, local CLIs, isolated subprocesses — no shell, prompts via stdin. Your machine, your rules. |
+| **🛡️ Human-in-the-Loop** | Gatekeeper blocks unapproved work; artifacts and verdicts keep every decision inspectable. The human stays in command. |
+| **🌐 Multi-Channel** | CLI today, interactive Textual TUI now, future desktop channels. One engine, multiple interfaces. |
 
 ## Architecture
 
