@@ -24,4 +24,4 @@ herdr:
   read_lines: 1000
   keep: true
   outlive_parent: true
-  fallback_to_subprocess: false
+  mode: persistent

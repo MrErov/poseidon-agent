@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.4.0-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.0-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-71%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-94%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -149,7 +149,7 @@ poseidon run --phase 0 --executor opencode
 |----------|------------|
 | `claude-code` | `claude -p --output-format text` (prompt via stdin) |
 | `codex` | `codex exec -` (prompt via stdin) |
-| `opencode` | `opencode run -` (prompt via stdin) |
+| `opencode` | `opencode run` (no positional message; prompt via stdin) |
 
 All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Override binaries with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` or `POSEIDON_OPENCODE_BIN`.
 
@@ -173,9 +173,32 @@ herdr:
   read_lines: 1000
   keep: true
   outlive_parent: true
+  mode: persistent  # persistent | headless
 ```
 
-Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses JSON-RPC 2.0 over `hc connect` (`terminal.run`, `terminal.send`, `terminal.wait`, `terminal.read`) with strict response validation; controlled errors include the terminal address for `hc attach`.
+Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses one JSON-RPC 2.0 session per run over `hc connect`, with a stable caller identity and strict response validation.
+
+**Persistent mode (default):** `terminal.run` starts the agent in the background, `terminal.send` delivers the prompt with `wait: true`, and Herdr waits for the agent **turn**, not for the interactive program to exit. This prevents false "still running" failures when OpenCode remains open after answering. If the send does not return a wait result, Poseidon falls back to `terminal.wait` with the same caller. `terminal.read` accepts only stable, complete output; `how: stitched` is valid TUI history, not truncation. The prompt is sent exactly as written—Herdr already submits it with Enter.
+
+**Headless mode:** set `herdr.mode: headless` to call `machine.exec` once with a non-interactive agent command and a base64-encoded prompt. Results are rejected on timeout, truncation, nonzero exit, or empty output. Herdr caps this mode at 600 seconds. OpenCode headless uses `opencode run --format json` with stdin (no `-` argument).
+
+
+### Troubleshooting Herdr
+
+Herdr delivers pasted input after roughly 3 seconds of terminal quiet (or up to 60 seconds while a draft is active). A running interactive interface is not evidence of failure; Herdr distinguishes the **agent turn** from the **process lifetime**.
+
+- `hc ls --all` — lists live and finished terminals, including exit codes.
+- `hc attach tN` — attaches to a live terminal to inspect prompts or permission dialogs.
+- `hc read tN` — reads current output without attaching.
+- `hc get tN` — shows terminal state and last reported status.
+- `hc kill tN` — stops a terminal while preserving its record for inspection.
+- `hc rm tN` — removes a terminal record after you no longer need it.
+
+When OpenCode pauses for file-read or command permissions, attach with `hc attach tN`, review the exact action, and respond in that terminal. Poseidon does not auto-approve those requests.
+
+**Ctrl+C does not kill a Herdr terminal.** It only closes the client. The agent remains alive in `herdr-core` and can be recovered with `hc attach`. A timeout is a check-in, not proof that the agent stopped working; inspect `reason` and `status` before assuming failure.
+
+Persistent-mode timeout errors include the terminal address and `attach`/`read`/`kill` hints. `reason: message` means another terminal sent your agent a message; `reason: not_started` means no agent turn began. A completed `read` with `how: stitched` is normal for a full-screen TUI.
 
 ### Textual TUI
 
@@ -212,6 +235,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.5.0** — Herdr turn semantics: persistent JSON-RPC sessions, turn-aware waits, headless machine execution, and strict mode/config validation.
 - **v3.4.0** — Marketing Release: product-style READMEs, VHS demo script and Keel Nav protocol README.
 - **v3.3.0** — Production-Ready Architecture: decoupled `PhaseRunner`, atomic persistence and strict config validation.
 - **v3.2.0** — TUI inputs, Herdr JSON-RPC hardening, 300 s timeout, `Ctrl+X` cancellation.

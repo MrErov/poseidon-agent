@@ -1,6 +1,19 @@
-# Changelog
+## [3.5.0] - 2026-11-24
+### Fixed
+- **Herdr turn semantics:** `terminal.send` now uses `wait: true` with a stable caller, waiting for the agent turn rather than for an interactive program to exit. No more false `still running` errors after a successful response.
+- Replaced one `hc connect` process per RPC call with a single session per execution, JSON-RPC line matching, and notification filtering.
+- `terminal.wait` fallback when `terminal.send` does not return `wait`; wait results are interpreted by `reason`, `status`, and `exit_code` with explicit `attach`/`read`/`kill` guidance.
+- Read validation rejects unstable output (`why`) and incomplete reads while accepting normal full-screen `stitched` history.
+- Removed the redundant manual newline from Herdr prompts; Herdr already pastes and submits with Enter.
+- OpenCode invocation corrected to `opencode run` (no positional message), matching its actual stdin behavior.
+- `machine.exec` headless timeouts are capped at 600 seconds and respect truncation, exit codes, and base64 output.
 
-All notable changes to Poseidon Agent will be documented in this file.
+### Added
+- Optional `herdr.mode: headless` for one-shot, non-interactive execution with base64 stdin and stdout decoding.
+- Strict `persistent | headless` validation and a 900-second default wait timeout across code, config, and docs.
+- Config validation rejects unknown top-level, role, and Herdr keys (including obsolete `fallback_to_subprocess`) and non-string phase-role references.
+- New tests for single-session transport, turn reasons, recovery hints, complete/stitched reads, headless execution, and strict configuration.
+- README **Troubleshooting Herdr** section with terminal lifecycle, permission handling, and `Ctrl+C` behavior.
 
 ## [3.4.0] - 2026-11-24
 ### Added

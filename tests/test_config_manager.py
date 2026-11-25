@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from poseidon.config_manager import ConfigError, ConfigManager
+from poseidon.config_manager import ConfigError, ConfigManager, ConfigValidationError
 
 
 def _write_config(path: Path) -> None:
@@ -90,3 +90,80 @@ def test_canonical_phase_name_uses_phase_zero_role(tmp_path: Path) -> None:
     result = ConfigManager(config).resolve("00-context-bootstrap")
 
     assert result.role == "architect"
+
+
+def test_herdr_defaults_are_900_seconds_and_persistent(tmp_path: Path) -> None:
+    result = ConfigManager(tmp_path / "missing.yaml").resolve("1b")
+
+    assert result.herdr["wait_timeout_seconds"] == 900
+    assert result.herdr["mode"] == "persistent"
+
+
+def test_unknown_herdr_key_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "herdr:\n  fallback_to_subprocess: false\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError, match="Unknown Herdr settings"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_unknown_role_key_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            "    name_prefix: poseidon-tester",
+            "    name_prefix: poseidon-tester\n    unexpected: true",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError, match="unknown keys"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_unknown_top_level_key_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("unknown: true\n")
+
+    with pytest.raises(ConfigValidationError, match="top-level"):
+        ConfigManager(config).resolve("1b")
+
+
+@pytest.mark.parametrize("mode", ["headless", "persistent"])
+def test_valid_herdr_modes_are_allowed(mode: str, tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write(f"  mode: {mode}\n")
+
+    result = ConfigManager(config).resolve("1b")
+
+    assert result.herdr["mode"] == mode
+
+
+def test_invalid_herdr_mode_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  mode: invalid\n")
+
+    with pytest.raises(ConfigValidationError, match="mode must be one of"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_phase_role_non_string_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "roles:\n  tester:\n    executor: api\n"
+        "phase_roles:\n  1b: [tester]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError, match="role reference must be a string"):
+        ConfigManager(config).resolve("1b")

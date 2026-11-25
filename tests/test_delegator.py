@@ -11,7 +11,7 @@ from poseidon.delegator import DelegationError, LocalCLIDelegator
     ("cli_type", "expected_command"),
     [
         ("codex", ["codex", "exec", "-"]),
-        ("opencode", ["opencode", "run", "-"]),
+        ("opencode", ["opencode", "run"]),
     ],
 )
 def test_delegator_passes_prompt_via_stdin(cli_type: str, expected_command: list[str]) -> None:

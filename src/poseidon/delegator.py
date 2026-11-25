@@ -52,7 +52,7 @@ class LocalCLIDelegator:
         elif normalized_cli == "codex":
             command = [executable, "exec", "-"]
         else:
-            command = [executable, "run", "-"]
+            command = [executable, "run"]
 
         run_options: dict[str, object] = {
             "capture_output": True,

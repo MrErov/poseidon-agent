@@ -49,14 +49,18 @@ class ConfigManager:
 
     _VALID_EXECUTORS = {"api", "claude-code", "codex", "opencode", "herdr"}
     _VALID_RUNTIMES = {"api", "herdr"}
+    _VALID_MODES = {"persistent", "headless"}
+    _TOP_LEVEL_KEYS = {"version", "roles", "phase_roles", "herdr"}
+    _ROLE_KEYS = {"executor", "model", "runtime", "agent", "name_prefix", "herdr"}
     _HERDR_DEFAULTS = {
         "executable": "hc",
-        "wait_timeout_seconds": 180.0,
+        "wait_timeout_seconds": 900.0,
         "read_lines": 1000,
         "keep": True,
         "outlive_parent": True,
         "name_prefix": "poseidon",
         "connection_timeout_seconds": 30.0,
+        "mode": "persistent",
     }
     _HERDR_TYPES = {
         "executable": str,
@@ -66,6 +70,7 @@ class ConfigManager:
         "outlive_parent": bool,
         "name_prefix": str,
         "connection_timeout_seconds": (int, float),
+        "mode": str,
     }
 
     def __init__(self, config_path: str | Path | None = None) -> None:
@@ -89,7 +94,8 @@ class ConfigManager:
         normalized_phase = phase.strip().lower()
         phase_id = _PHASE_IDS.get(normalized_phase, normalized_phase)
         selected_role = role or phase_roles.get(phase_id)
-        base_herdr = dict(data.get("herdr", {}) or {})
+        base_herdr = self._HERDR_DEFAULTS | dict(data.get("herdr", {}) or {})
+        self._validate_herdr_settings(base_herdr)
 
         if selected_role is None:
             executor = cli_executor or "api"
@@ -123,7 +129,7 @@ class ConfigManager:
                 role_settings.get("executor") if runtime == "herdr" else "claude-code"
             )
 
-        herdr = dict(base_herdr)
+        herdr = self._HERDR_DEFAULTS | dict(data.get("herdr", {}) or {})
         herdr.update(role_settings.get("herdr", {}) or {})
         if role_settings.get("name_prefix"):
             herdr["name_prefix"] = role_settings["name_prefix"]
@@ -156,6 +162,12 @@ class ConfigManager:
     def _validate_role_settings(self, settings: dict[str, Any], role_name: str) -> None:
         if not isinstance(settings, dict):
             raise ConfigValidationError(f"Role '{role_name}' must be a mapping.")
+
+        unknown_keys = set(settings) - self._ROLE_KEYS
+        if unknown_keys:
+            raise ConfigValidationError(
+                f"Role '{role_name}' has unknown keys: {sorted(unknown_keys)}"
+            )
 
         executor = settings.get("executor")
         if executor is not None and not isinstance(executor, str):
@@ -195,6 +207,19 @@ class ConfigManager:
             )
 
     def _validate_herdr_settings(self, herdr: dict[str, Any]) -> None:
+        unknown_keys = set(herdr) - set(self._HERDR_TYPES)
+        if unknown_keys:
+            raise ConfigValidationError(
+                f"Unknown Herdr settings: {sorted(unknown_keys)}"
+            )
+
+        mode = herdr.get("mode")
+        if mode is not None and mode not in self._VALID_MODES:
+            options = ", ".join(sorted(self._VALID_MODES))
+            raise ConfigValidationError(
+                f"Herdr mode must be one of: {options}; got {mode!r}"
+            )
+
         for key, expected_type in self._HERDR_TYPES.items():
             value = herdr.get(key)
             if value is None:
@@ -239,6 +264,12 @@ class ConfigManager:
         if not isinstance(data, dict):
             raise ConfigError(f"{self.config_path} must contain a YAML mapping.")
 
+        unknown_keys = set(data) - self._TOP_LEVEL_KEYS
+        if unknown_keys:
+            raise ConfigValidationError(
+                f"Unknown top-level configuration keys: {sorted(unknown_keys)}"
+            )
+
         roles = data.get("roles", {})
         if not isinstance(roles, dict):
             raise ConfigError("The 'roles' section must be a mapping.")
@@ -278,6 +309,11 @@ class ConfigManager:
         phase_roles = data.get("phase_roles", {})
         if not isinstance(phase_roles, dict):
             raise ConfigError("The 'phase_roles' section must be a mapping.")
+        for phase_name, role_name in phase_roles.items():
+            if not isinstance(role_name, str):
+                raise ConfigValidationError(
+                    f"Phase '{phase_name}': role reference must be a string"
+                )
 
         herdr = data.get("herdr", {})
         if not isinstance(herdr, dict):
