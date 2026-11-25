@@ -35,7 +35,7 @@ class LocalCLIDelegator:
         self.timeout_seconds = timeout_seconds
         self._executables = dict(executables or {})
 
-    def execute(self, prompt: str, cli_type: str) -> str:
+    def execute(self, prompt: str, cli_type: str, model: str | None = None) -> str:
         """Envía un prompt al CLI seleccionado y devuelve su stdout textual."""
         normalized_cli = cli_type.strip().lower()
         if normalized_cli not in self._COMMANDS:
@@ -53,6 +53,9 @@ class LocalCLIDelegator:
             command = [executable, "exec", "-"]
         else:
             command = [executable, "run"]
+
+        if model and model.strip():
+            command.extend(["--model", model.strip()])
 
         run_options: dict[str, object] = {
             "capture_output": True,

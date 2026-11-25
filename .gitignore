@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .pytest-tmp/
 .tmp/
+/.poseidon/tmp/
 /pytest-of-hp/
 .ruff_cache/
 .uv-cache/

@@ -47,7 +47,7 @@ class ExecutionEngine:
             return self._execute_api(messages, model_name)
         else:
             prompt = PromptBuilder.format_for_cli(messages)
-            return self._execute_delegator(prompt, executor, herdr_agent)
+            return self._execute_delegator(prompt, executor, herdr_agent, model_name)
 
     def _execute_api(self, messages: list[dict[str, str]], model_name: str) -> str:
         try:
@@ -64,13 +64,17 @@ class ExecutionEngine:
         return self._extract_content(response)
 
     def _execute_delegator(
-        self, prompt: str, executor: str, herdr_agent: str | None
+        self,
+        prompt: str,
+        executor: str,
+        herdr_agent: str | None,
+        model_name: str | None = None,
     ) -> str:
         try:
             if executor == "herdr":
                 return self.herdr_delegator.execute(prompt, herdr_agent or "claude-code")
             else:
-                return self.delegator.execute(prompt, executor)
+                return self.delegator.execute(prompt, executor, model=model_name)
         except DelegationError as exc:
             raise CompletionError(f"No se pudo ejecutar con '{executor}': {exc}") from exc
 

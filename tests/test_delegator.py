@@ -29,6 +29,31 @@ def test_delegator_passes_prompt_via_stdin(cli_type: str, expected_command: list
     assert run.call_args.kwargs["shell"] is False
 
 
+@pytest.mark.parametrize(
+    ("cli_type", "expected_command"),
+    [
+        ("opencode", ["opencode", "run", "--model", "nvidia/test"]),
+        (
+            "claude-code",
+            ["claude", "-p", "--output-format", "text", "--model", "nvidia/test"],
+        ),
+        ("codex", ["codex", "exec", "-", "--model", "nvidia/test"]),
+    ],
+)
+def test_delegator_propagates_model_to_local_executors(
+    cli_type: str, expected_command: list[str]
+) -> None:
+    delegator = LocalCLIDelegator(executables={cli_type: expected_command[0]})
+    completed = SimpleNamespace(returncode=0, stdout="resultado", stderr="")
+
+    with patch("poseidon.delegator.subprocess.run", return_value=completed) as run:
+        delegator.execute("prompt", cli_type, model="nvidia/test")
+
+    assert run.call_args.args[0] == expected_command
+    assert run.call_args.kwargs["input"] == "prompt"
+    assert run.call_args.kwargs["shell"] is False
+
+
 def test_delegator_preserves_executable_path_with_spaces() -> None:
     executable = r"C:\Tools\Open Code\opencode.exe"
     delegator = LocalCLIDelegator(executables={"opencode": executable})

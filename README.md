@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.0-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.1-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-94%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-115%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -174,16 +174,35 @@ herdr:
   keep: true
   outlive_parent: true
   mode: persistent  # persistent | headless
+  launch: headless_in_terminal  # interactive | headless_in_terminal
+  agent_model: ""  # optional; adds --model "<model>" when set
+  agent_args: []   # extra CLI arguments appended to the agent command
 ```
 
 Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses one JSON-RPC 2.0 session per run over `hc connect`, with a stable caller identity and strict response validation.
 
-**Persistent mode (default):** `terminal.run` starts the agent in the background, `terminal.send` delivers the prompt with `wait: true`, and Herdr waits for the agent **turn**, not for the interactive program to exit. This prevents false "still running" failures when OpenCode remains open after answering. If the send does not return a wait result, Poseidon falls back to `terminal.wait` with the same caller. `terminal.read` accepts only stable, complete output; `how: stitched` is valid TUI history, not truncation. The prompt is sent exactly as written—Herdr already submits it with Enter.
+**Headless-in-terminal (default):** Poseidon writes the prompt to `.poseidon/tmp/<uuid>.prompt.md`, starts a non-interactive command with `terminal.run`, waits for the command to exit with `terminal.wait`, and retrieves the response with `terminal.read`. Prompt files are always deleted in `finally`; `.poseidon/tmp/` is gitignored. Shell redirection keeps prompt contents out of Windows' 8191-character command-line limit. Set `herdr.agent_model` to add `--model "<model>"`; `agent_args` appends extra arguments. Paths with spaces are quoted.
 
-**Headless mode:** set `herdr.mode: headless` to call `machine.exec` once with a non-interactive agent command and a base64-encoded prompt. Results are rejected on timeout, truncation, nonzero exit, or empty output. Herdr caps this mode at 600 seconds. OpenCode headless uses `opencode run --format json` with stdin (no `-` argument).
+**Interactive (experimental):** the existing TUI flow uses `terminal.send(wait: true)` with the **real terminal address as caller**, falling back to `terminal.wait` with the same address. This requires an agent that reports status to Herdr. OpenCode's TUI may report no status and no turn, so an interactive agent that answers and remains open cannot be waited on reliably. Use `launch: headless_in_terminal` for deterministic completion.
+
+**Headless machine execution:** `herdr.mode: headless` still supports one-shot `machine.exec` calls with base64 stdin, capped at 600 seconds. OpenCode uses `opencode run --format json` with stdin (no `-` argument).
 
 
 ### Troubleshooting Herdr
+
+#### Environment prerequisites (B1)
+
+On Windows, the Python interpreter running Poseidon must have **Medium Mandatory Level** integrity. If you see `os error 5` when calling `hc connect`, check `icacls <project-path>` and `whoami /groups`: a project marked `Mandatory Label\\Low Mandatory Level` runs Python in Low IL and cannot open Herdr's Medium-IL named pipe. Use Python outside the Low-IL directory or, as an administrator, run `icacls "C:\path\to\project" /setintegritylevel (OI)(CI)M /T`.
+
+The OpenCode model must exist in the catalog shown by `opencode models`. If it is missing, pass `herdr.agent_model` explicitly. An empty `agent_model` leaves model selection to OpenCode's default configuration, so an invalid default model can still fail.
+
+#### Verified headless-in-terminal recipe
+
+```text
+terminal.run  line='opencode run --model "<model>" < "<prompt_file>"'
+terminal.wait timeout=300  → {"ended":true,"exit_code":0,"reason":"exit"}
+terminal.read lines=300    → how=history complete=True → agent output
+```
 
 Herdr delivers pasted input after roughly 3 seconds of terminal quiet (or up to 60 seconds while a draft is active). A running interactive interface is not evidence of failure; Herdr distinguishes the **agent turn** from the **process lifetime**.
 
@@ -235,6 +254,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.5.1** — Headless-in-terminal delegation: prompt files, real interactive caller, explicit model handling, and Windows UTF-8 safety.
 - **v3.5.0** — Herdr turn semantics: persistent JSON-RPC sessions, turn-aware waits, headless machine execution, and strict mode/config validation.
 - **v3.4.0** — Marketing Release: product-style READMEs, VHS demo script and Keel Nav protocol README.
 - **v3.3.0** — Production-Ready Architecture: decoupled `PhaseRunner`, atomic persistence and strict config validation.

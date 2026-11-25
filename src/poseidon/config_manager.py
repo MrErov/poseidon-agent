@@ -50,6 +50,7 @@ class ConfigManager:
     _VALID_EXECUTORS = {"api", "claude-code", "codex", "opencode", "herdr"}
     _VALID_RUNTIMES = {"api", "herdr"}
     _VALID_MODES = {"persistent", "headless"}
+    _VALID_LAUNCHES = {"interactive", "headless_in_terminal"}
     _TOP_LEVEL_KEYS = {"version", "roles", "phase_roles", "herdr"}
     _ROLE_KEYS = {"executor", "model", "runtime", "agent", "name_prefix", "herdr"}
     _HERDR_DEFAULTS = {
@@ -61,6 +62,9 @@ class ConfigManager:
         "name_prefix": "poseidon",
         "connection_timeout_seconds": 30.0,
         "mode": "persistent",
+        "launch": "headless_in_terminal",
+        "agent_model": "",
+        "agent_args": [],
     }
     _HERDR_TYPES = {
         "executable": str,
@@ -71,6 +75,9 @@ class ConfigManager:
         "name_prefix": str,
         "connection_timeout_seconds": (int, float),
         "mode": str,
+        "launch": str,
+        "agent_model": str,
+        "agent_args": list,
     }
 
     def __init__(self, config_path: str | Path | None = None) -> None:
@@ -218,6 +225,21 @@ class ConfigManager:
             options = ", ".join(sorted(self._VALID_MODES))
             raise ConfigValidationError(
                 f"Herdr mode must be one of: {options}; got {mode!r}"
+            )
+
+        launch = herdr.get("launch")
+        if launch is not None and launch not in self._VALID_LAUNCHES:
+            options = ", ".join(sorted(self._VALID_LAUNCHES))
+            raise ConfigValidationError(
+                f"Herdr launch must be one of: {options}; got {launch!r}"
+            )
+
+        agent_args = herdr.get("agent_args")
+        if agent_args is not None and any(
+            not isinstance(arg, str) for arg in agent_args
+        ):
+            raise ConfigValidationError(
+                "Herdr 'agent_args' must contain only strings"
             )
 
         for key, expected_type in self._HERDR_TYPES.items():

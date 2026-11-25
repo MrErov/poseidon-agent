@@ -1,7 +1,17 @@
-## [3.5.0] - 2026-11-24
+## [3.5.1] - 2026-11-24
 ### Fixed
-- **Herdr turn semantics:** `terminal.send` now uses `wait: true` with a stable caller, waiting for the agent turn rather than for an interactive program to exit. No more false `still running` errors after a successful response.
-- Replaced one `hc connect` process per RPC call with a single session per execution, JSON-RPC line matching, and notification filtering.
+- **Headless-in-terminal default:** launch non-interactive agents with `terminal.run(line=...)`, `terminal.wait`, and `terminal.read` for deterministic completion instead of waiting for a TUI turn that may never be reported.
+- **Real interactive caller:** `terminal.send` and fallback `terminal.wait` now use the actual terminal address as `caller`, not a synthetic identifier.
+- **Prompt-file safety:** prompts are written to `.poseidon/tmp/<uuid>.prompt.md` and removed in `finally`, with `.poseidon/tmp/` ignored by Git.
+- **Model handling:** `herdr.agent_model` adds `--model "<model>"`; `herdr.agent_args` appends extra arguments. Paths with spaces are quoted.
+- **Windows UTF-8:** shared `poseidon.console.configure_utf8_output()` reconfigures legacy cp1252 streams before delegator messages, preventing `UnicodeEncodeError` outside the CLI.
+- **Local model propagation:** `LocalCLIDelegator.execute(..., model=...)` forwards models to OpenCode, Claude Code, and Codex without adding `opencode run -` (which is a literal argument).
+- **Config validation:** `launch`, `agent_model`, and `agent_args` are validated with allowed values and types; obsolete `fallback_to_subprocess` was removed from `config.yaml`.
+
+### Added
+- `herdr.launch: interactive | headless_in_terminal` and documentation for the experimental interactive flow, headless-in-terminal recipe, Windows integrity requirements, and model prerequisites.
+- Tests for prompt-file contents and cleanup, command-line quoting, real callers, read failures, UTF-8 output, local model flags, and launch/model/args validation.
+
 - `terminal.wait` fallback when `terminal.send` does not return `wait`; wait results are interpreted by `reason`, `status`, and `exit_code` with explicit `attach`/`read`/`kill` guidance.
 - Read validation rejects unstable output (`why`) and incomplete reads while accepting normal full-screen `stitched` history.
 - Removed the redundant manual newline from Herdr prompts; Herdr already pastes and submits with Enter.

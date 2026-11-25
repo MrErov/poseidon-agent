@@ -167,3 +167,63 @@ def test_phase_role_non_string_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigValidationError, match="role reference must be a string"):
         ConfigManager(config).resolve("1b")
+
+
+@pytest.mark.parametrize("launch", ["interactive", "headless_in_terminal"])
+def test_valid_herdr_launch_values_are_allowed(launch: str, tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write(f"  launch: {launch}\n")
+
+    result = ConfigManager(config).resolve("1b")
+
+    assert result.herdr["launch"] == launch
+
+
+def test_invalid_herdr_launch_is_rejected(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  launch: invalid\n")
+
+    with pytest.raises(ConfigValidationError, match="launch must be one of"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_herdr_launch_defaults_to_headless_in_terminal(tmp_path: Path) -> None:
+    result = ConfigManager(tmp_path / "missing.yaml").resolve("1b")
+
+    assert result.herdr["launch"] == "headless_in_terminal"
+    assert result.herdr["agent_model"] == ""
+    assert result.herdr["agent_args"] == []
+
+
+def test_agent_model_must_be_a_string(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  agent_model: 123\n")
+
+    with pytest.raises(ConfigValidationError, match="agent_model"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_agent_args_must_be_a_list_of_strings(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  agent_args: [--format, 123]\n")
+
+    with pytest.raises(ConfigValidationError, match="only strings"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_agent_args_must_be_a_list(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  agent_args: '--format'\n")
+
+    with pytest.raises(ConfigValidationError, match="agent_args"):
+        ConfigManager(config).resolve("1b")

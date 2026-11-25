@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import queue
 import subprocess
 import threading
@@ -15,6 +14,7 @@ from typing import Any
 
 from rich.console import Console
 
+from poseidon.console import configure_utf8_output
 from poseidon.exceptions import DelegationError
 
 _EOF = object()
@@ -183,6 +183,9 @@ class HerdrDelegator:
         connection_timeout_seconds: float = 30.0,
         console: Console | None = None,
         mode: str = "persistent",
+        launch: str = "headless_in_terminal",
+        agent_model: str = "",
+        agent_args: list[str] | None = None,
     ) -> None:
         if wait_timeout_seconds <= 0 or connection_timeout_seconds <= 0:
             raise ValueError("Herdr timeouts must be greater than zero")
@@ -190,6 +193,10 @@ class HerdrDelegator:
             raise ValueError("read_lines cannot be negative")
         if mode not in {"persistent", "headless"}:
             raise ValueError("Herdr mode must be 'persistent' or 'headless'")
+        if launch not in {"interactive", "headless_in_terminal"}:
+            raise ValueError(
+                "Herdr launch must be 'interactive' or 'headless_in_terminal'"
+            )
 
         self.executable = executable
         self.wait_timeout_seconds = float(wait_timeout_seconds)
@@ -199,8 +206,11 @@ class HerdrDelegator:
         self.name_prefix = name_prefix
         self.connection_timeout_seconds = float(connection_timeout_seconds)
         self.console = console or Console()
+        configure_utf8_output()
         self.mode = mode
-        self.caller_id = f"poseidon-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        self.launch = launch
+        self.agent_model = agent_model.strip()
+        self.agent_args = list(agent_args or [])
         self._request_id = 0
 
     @classmethod
@@ -218,6 +228,9 @@ class HerdrDelegator:
                 values.get("connection_timeout_seconds", 30)
             ),
             mode=str(values.get("mode", "persistent")),
+            launch=str(values.get("launch", "headless_in_terminal")),
+            agent_model=str(values.get("agent_model", "")),
+            agent_args=list(values.get("agent_args", [])),
         )
 
     def execute(self, prompt: str, cli_type: str) -> str:
@@ -234,6 +247,8 @@ class HerdrDelegator:
         with _HerdrSession(self) as session:
             if self.mode == "headless":
                 return self._execute_headless(session, prompt, normalized_cli)
+            if self.launch == "headless_in_terminal":
+                return self._execute_headless_terminal(session, prompt, normalized_cli)
             return self._execute_persistent(session, prompt, normalized_cli)
 
     def _execute_persistent(
@@ -243,7 +258,6 @@ class HerdrDelegator:
         run_result = session.call(
             "terminal.run",
             {
-                "caller": self.caller_id,
                 "argv": [self._AGENTS[cli_type]],
                 "name": terminal_name,
                 "cwd": str(Path.cwd()),
@@ -262,7 +276,7 @@ class HerdrDelegator:
             send_result = session.call(
                 "terminal.send",
                 {
-                    "caller": self.caller_id,
+                    "caller": address,
                     "terminal": address,
                     "text": prompt,
                     "wait": True,
@@ -274,7 +288,7 @@ class HerdrDelegator:
                 wait_result = session.call(
                     "terminal.wait",
                     {
-                        "caller": self.caller_id,
+                        "caller": address,
                         "terminal": address,
                         "timeout": self.wait_timeout_seconds,
                     },
@@ -285,7 +299,7 @@ class HerdrDelegator:
             read_result = session.call(
                 "terminal.read",
                 {
-                    "caller": self.caller_id,
+                    "caller": address,
                     "terminal": address,
                     "lines": self.read_lines,
                 },
@@ -300,6 +314,88 @@ class HerdrDelegator:
                 f"{exc} Terminal {address} remains available; "
                 f"inspect it with `hc attach {address}`."
             ) from exc
+
+    def _execute_headless_terminal(
+        self, session: _HerdrSession, prompt: str, cli_type: str
+    ) -> str:
+        prompt_path = self._write_prompt_file(prompt)
+        address = "unknown"
+        try:
+            run_result = session.call(
+                "terminal.run",
+                {
+                    "line": self._headless_command_line(prompt_path, cli_type),
+                    "name": f"{self.name_prefix}-{uuid.uuid4().hex[:16]}",
+                    "cwd": str(Path.cwd()),
+                    "wait": False,
+                    "no_parent": True,
+                    "outlive_parent": self.outlive_parent,
+                    "keep": self.keep,
+                },
+            )
+            address = run_result.get("address")
+            if not isinstance(address, str) or not address:
+                raise DelegationError("Herdr did not return a terminal address.")
+
+            self._print_wait_feedback(address)
+            wait_result = session.call(
+                "terminal.wait",
+                {"terminal": address, "timeout": self.wait_timeout_seconds},
+            )
+            self._print_wait_result(wait_result)
+            self._validate_wait_result(address, wait_result)
+            reason = str(wait_result.get("reason", "unknown")).lower()
+            if wait_result.get("ended") is not True or reason != "exit":
+                raise DelegationError(
+                    f"Herdr terminal {address} did not finish its headless command."
+                )
+
+            read_result = session.call(
+                "terminal.read",
+                {
+                    "caller": address,
+                    "terminal": address,
+                    "lines": self.read_lines,
+                },
+            )
+            self._validate_read_result(address, read_result)
+            output = read_result["text"]
+            if not output.strip():
+                raise DelegationError(f"Herdr terminal {address} returned empty output.")
+            return output
+        except DelegationError as exc:
+            raise DelegationError(
+                f"{exc} Terminal {address} remains available; "
+                "inspect it with `hc attach`."
+            ) from exc
+        finally:
+            try:
+                prompt_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _write_prompt_file(self, prompt: str) -> Path:
+        directory = Path.cwd() / ".poseidon" / "tmp"
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            prompt_path = directory / f"{uuid.uuid4().hex}.prompt.md"
+            prompt_path.write_text(prompt, encoding="utf-8")
+        except OSError as exc:
+            raise DelegationError(f"Could not write the prompt file: {exc}") from exc
+        return prompt_path
+
+    def _headless_command_line(self, prompt_path: Path, cli_type: str) -> str:
+        args = {
+            "claude-code": ["claude", "-p", "--output-format", "text"],
+            "codex": ["codex", "exec", "-"],
+            "opencode": ["opencode", "run"],
+        }[cli_type].copy()
+        command_parts = [subprocess.list2cmdline(args)]
+        if self.agent_model:
+            command_parts.append(f'--model "{self.agent_model}"')
+        command_parts.extend(self.agent_args)
+        command = " ".join(command_parts)
+        return f"{command} < {subprocess.list2cmdline([str(prompt_path)])}"
 
     def _execute_headless(
         self, session: _HerdrSession, prompt: str, cli_type: str

@@ -1,6 +1,5 @@
 """Interfaz de línea de comandos de Poseidón."""
 
-import sys
 from typing import Annotated
 
 import typer
@@ -9,6 +8,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from poseidon.config_manager import ConfigError, ConfigManager
+from poseidon.console import configure_utf8_output
 from poseidon.core import GateError, PhaseRunner, PoseidonError
 from poseidon.herdr_delegator import HerdrDelegator
 
@@ -23,14 +23,7 @@ error_console = Console(stderr=True)
 
 def _configure_utf8_output() -> None:
     """Evita errores de consolas Windows heredadas con mensajes Unicode."""
-    if sys.platform != "win32":
-        return
-
-    for stream in (sys.stdout, sys.stderr):
-        encoding = (getattr(stream, "encoding", "") or "").lower().replace("_", "-")
-        reconfigure = getattr(stream, "reconfigure", None)
-        if encoding not in {"utf-8", "utf8"} and callable(reconfigure):
-            reconfigure(encoding="utf-8", errors="replace")
+    configure_utf8_output()
 
 
 @app.callback()

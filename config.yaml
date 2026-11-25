@@ -25,3 +25,6 @@ herdr:
   keep: true
   outlive_parent: true
   mode: persistent
+  launch: headless_in_terminal
+  agent_model: ""
+  agent_args: []
