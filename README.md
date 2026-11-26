@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/logo.png" alt="Poseidon Agent Logo" width="180">
+  <img src="docs/assets/logo.png" alt="Poseidon Agent with lantern and trident" width="180">
   <h1>🔱 Poseidon Agent</h1>
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
