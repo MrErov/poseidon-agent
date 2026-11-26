@@ -1,3 +1,11 @@
+## [3.5.5] - 2026-11-26
+### Fixed
+- **Headless output:** a finished `headless_in_terminal` run with `exit 0` no longer fails when Herdr returns truncated history (`complete=false`); terminal text is display-only and owned artifacts are validated separately.
+- **Idempotent transitions:** self-transitions are allowed so Poseidon can write `drift_report` even when an agent already applied the target status.
+
+### Added
+- Regression tests for truncated headless reads and an agent-applied `certified` status.
+
 ## [3.5.4] - 2026-11-26
 ### Fixed
 - **Lifecycle state gap:** `SpecStatus` now models `implemented`, the state the Keel Nav protocol requires between audit and drift. Adds `audited|approved -> implemented` and `implemented -> observed|certified`.

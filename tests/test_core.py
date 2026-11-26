@@ -759,6 +759,33 @@ def test_drift_certifies_implemented_spec(
     assert "✅ Drift certificado" in output.getvalue()
 
 
+def test_drift_certifies_when_agent_already_applied_certified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="4", spec_name="specs/US-002.spec.md")
+    spec_file.write_text(
+        "---\nstatus: implemented\ndrift_report: pending\n---\n# US-002\n",
+        encoding="utf-8",
+    )
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    def _agent_edits_spec(*args, **kwargs):
+        spec_file.write_text(
+            "---\nstatus: certified\ndrift_report: pending\n---\n# US-002\n",
+            encoding="utf-8",
+        )
+        return _response("---\neffective_verdict: no-drift\n---\n")
+
+    with patch("poseidon.core.litellm.completion", side_effect=_agent_edits_spec):
+        runner.run("4", str(spec_file), "modelo")
+
+    updated = spec_file.read_text(encoding="utf-8")
+    assert "status: certified" in updated
+    assert "drift_report: specs/US-002.drift.1.md" in updated
+    assert "✅ Drift certificado" in output.getvalue()
+
+
 def test_odd_approved_after_implemented_updates_spec_to_observed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

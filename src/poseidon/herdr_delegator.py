@@ -670,7 +670,7 @@ class HerdrDelegator:
                     "lines": self.read_lines,
                 },
             )
-            self._validate_read_result(address, read_result)
+            self._validate_read_result(address, read_result, allow_incomplete=True)
             if artifact_path is not None:
                 return self._read_owned_artifact(artifact_path, wait_result)
             output = read_result["text"]
@@ -827,13 +827,18 @@ class HerdrDelegator:
             )
 
     @staticmethod
-    def _validate_read_result(address: str, read_result: Mapping[str, Any]) -> None:
+    def _validate_read_result(
+        address: str,
+        read_result: Mapping[str, Any],
+        *,
+        allow_incomplete: bool = False,
+    ) -> None:
         why = read_result.get("why")
         if why:
             raise DelegationError(
                 f"Herdr terminal {address} output is not stable: {why}."
             )
-        if read_result.get("complete") is not True:
+        if read_result.get("complete") is not True and not allow_incomplete:
             how = read_result.get("how") or "unknown"
             raise DelegationError(
                 f"Herdr terminal {address} returned incomplete output (how={how})."

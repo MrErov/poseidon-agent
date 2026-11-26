@@ -77,7 +77,11 @@ class SpecStateMachine:
         current = self.read_status(spec_path)
 
         allowed = _VALID_TRANSITIONS.get(current, set())
-        if target_status != SpecStatus.AUDITED and target_status not in allowed:
+        if (
+            target_status != SpecStatus.AUDITED
+            and target_status not in allowed
+            and target_status != current
+        ):
             allowed_str = ", ".join(s.value for s in allowed)
             raise IllegalTransitionError(
                 f"Transición de estado no permitida: {current.value} -> {target_status.value}. "

@@ -525,16 +525,15 @@ def test_headless_read_why_is_rejected(tmp_path: Path) -> None:
     monkeypatch.undo()
 
 
-def test_headless_incomplete_read_is_rejected(tmp_path: Path) -> None:
+def test_headless_incomplete_read_is_accepted_after_exit(tmp_path: Path) -> None:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.chdir(tmp_path)
     process = _headless_terminal_process(
-        read_result=_read_result("partial", complete=False)
+        read_result=_read_result("partial", complete=False, how="history")
     )
 
     with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
-        with pytest.raises(DelegationError, match="incomplete output"):
-            HerdrDelegator().execute("prompt", "opencode")
+        assert HerdrDelegator().execute("prompt", "opencode") == "partial"
 
     assert not _prompt_path(process).exists()
     monkeypatch.undo()
