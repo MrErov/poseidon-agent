@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-188%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-191%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -76,8 +76,6 @@ Poseidón is the deterministic execution engine for the **Keel Nav** protocol. I
 | **Orchestration** | Model improvises next action | **The Map Rules**: Thin orchestrator coordinates `SpecStateMachine`, `PromptBuilder`, `ExecutionEngine` |
 | **Auditability** | Opaque decision trail | **Full Traceability**: Every phase produces immutable artifacts; every transition logged and verifiable |
 | **Control** | Agent decides next step | **Human-in-the-Loop**: Gatekeeper blocks unapproved work; Navigator authorizes every phase transition |
-
-> **Poseidon doesn't replace the Navigator—it makes the Navigator's intent executable and verifiable.**
 
 > **Poseidon doesn't replace the Navigator—it makes the Navigator's intent executable and verifiable.**
 
@@ -191,7 +189,7 @@ poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --m
 poseidon run --phase 1b
 ```
 
-- When `specs/` contains exactly one `*.spec.md`, Poseidón uses it and prints `ℹ️ Auto-detectado spec: specs/US-002.spec.md`.
+- When `specs/` contains exactly one `*.spec.md`, Poseidón uses it and prints `ℹ️ Auto-detected spec: specs/US-002.spec.md`.
 - The role is resolved from `--role`, then `phase_roles`, then `default_role` in `config.yaml`, and finally `tester`.
 - `poseidon run` without arguments or with `-i` opens a wizard for phase, spec, and role.
 - `poseidon status` prints a Rich table with available phases, each spec's `status:`, and the default role.
@@ -261,13 +259,12 @@ Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses on
 
 
 ### Troubleshooting Herdr
-### Long phases and resumable waiting
+
+#### Long phases and resumable waiting
 
 A `terminal.wait` timeout is only a check-in, not proof that the agent stopped. Poseidon resumes the wait until `herdr.total_timeout_seconds` (default 3600), polling `terminal.read` every `progress_interval_seconds` and showing the last meaningful output line. Per-phase deadlines can be set with `phase_timeouts`, for example `{"0": 14400, "1a": 7200}`.
 
 If the total deadline is reached, the terminal remains alive. Reattach to the same work with `poseidon run --phase 0 --role tester --resume t19`. A subsequent run automatically reuses a live matching terminal. `machine.exec` is capped at 600 seconds; long phases require `headless_in_terminal`.
-
-### Troubleshooting Herdr
 
 #### Environment prerequisites (B1)
 
