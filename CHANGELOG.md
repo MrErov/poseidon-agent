@@ -1,3 +1,11 @@
+## [3.5.6] - 2026-11-26
+### Fixed
+- **Drift verdict contract:** the Phase 4 prompt now declares the required `effective_verdict` frontmatter field (`no-drift | drifted | drifted-accepted`), and artifact validation accepts the plain `verdict` fallback defined by skill 05.
+- **US-002 certified:** the health endpoint drift report passed with 0 blocking findings and the spec advanced to `certified`.
+
+### Added
+- Tests for the drift frontmatter contract and plain-verdict fallback.
+
 ## [3.5.5] - 2026-11-26
 ### Fixed
 - **Headless output:** a finished `headless_in_terminal` run with `exit 0` no longer fails when Herdr returns truncated history (`complete=false`); terminal text is display-only and owned artifacts are validated separately.

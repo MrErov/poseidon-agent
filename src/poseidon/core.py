@@ -119,6 +119,7 @@ class PhaseRunner:
             graph_context=graph_context,
             artifact_path=artifact_path,
             preserve_spec_state=phase_kind == "tdd",
+            phase_kind=phase_kind,
         )
 
         content = self.execution_engine.execute(

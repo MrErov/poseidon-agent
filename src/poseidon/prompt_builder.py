@@ -7,6 +7,10 @@ from pathlib import Path
 
 from poseidon.mcp_client import fetch_graph_context
 
+_FRONTMATTER_CONTRACTS = {
+    "drift": "effective_verdict: <no-drift | drifted | drifted-accepted>",
+}
+
 
 class PromptBuilder:
     """Construye la lista de mensajes (Memoria Caliente) para una ejecución."""
@@ -24,6 +28,7 @@ class PromptBuilder:
         graph_context: str | None = None,
         artifact_path: Path | None = None,
         preserve_spec_state: bool = False,
+        phase_kind: str | None = None,
     ) -> list[dict[str, str]]:
         """Crea una lista nueva de mensajes; nunca reutiliza historial previo."""
         if spec_path is None:
@@ -42,14 +47,29 @@ class PromptBuilder:
                 "--- FIN DEL CONTEXTO ---"
             )
         if artifact_path is not None:
-            blocks.append(
-                "--- POSEIDON ARTIFACT OWNERSHIP ---\n"
+            artifact_lines = [
+                "--- POSEIDON ARTIFACT OWNERSHIP ---",
                 f"Write your artifact to '{artifact_path.as_posix()}' "
-                "(exact path; do not choose another).\n"
-                "Do not change 'status', 'goldfish_audit', or "
-                "'drift_report' in the spec frontmatter.\n"
-                "Poseidon will apply the state transition itself."
+                "(exact path; do not choose another).",
+            ]
+            contract = _FRONTMATTER_CONTRACTS.get(phase_kind or "")
+            if contract is not None:
+                artifact_lines.extend(
+                    [
+                        "Your artifact must begin with YAML frontmatter "
+                        "containing at least:",
+                        contract,
+                        "Use exactly these field names; Poseidon validates them.",
+                    ]
+                )
+            artifact_lines.extend(
+                [
+                    "Do not change 'status', 'goldfish_audit', or "
+                    "'drift_report' in the spec frontmatter.",
+                    "Poseidon will apply the state transition itself.",
+                ]
             )
+            blocks.append("\n".join(artifact_lines))
         elif preserve_spec_state:
             blocks.append(
                 "--- POSEIDON SPEC OWNERSHIP ---\n"

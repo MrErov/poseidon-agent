@@ -723,6 +723,27 @@ def test_owned_artifact_requires_effective_verdict(tmp_path: Path) -> None:
     monkeypatch.undo()
 
 
+def test_drift_artifact_accepts_plain_verdict(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    expected = tmp_path / "specs" / "US-002.drift.1.md"
+    expected.parent.mkdir()
+    expected.write_text(
+        "---\ndrift_round: 1\nverdict: no-drift\n---\nbody\n", encoding="utf-8"
+    )
+    process = _headless_terminal_process(
+        read_result=_read_result("raw stdout"), include_list=True
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        result = HerdrDelegator().execute(
+            "prompt", "opencode", phase_kind="drift", artifact_path=expected
+        )
+
+    assert "verdict: no-drift" in result
+    monkeypatch.undo()
+
+
 def test_timeout_wait_resumes_and_reports_progress(tmp_path: Path) -> None:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.chdir(tmp_path)

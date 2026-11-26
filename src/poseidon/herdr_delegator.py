@@ -468,6 +468,8 @@ class HerdrDelegator:
         if self.phase_kind in {"goldfish", "drift"}:
             verdict = metadata.get("effective_verdict")
             if not isinstance(verdict, str) or not verdict.strip():
+                verdict = metadata.get("verdict")
+            if not isinstance(verdict, str) or not verdict.strip():
                 raise DelegationError(
                     f"Artifact {path} is missing frontmatter effective_verdict."
                 )
