@@ -6,8 +6,15 @@ import pytest
 from typer.testing import CliRunner
 
 from poseidon.main import app
+from poseidon.version import get_version
 
 cli = CliRunner()
+
+
+def test_cli_version_flag() -> None:
+    result = cli.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert get_version() in result.output
 
 
 def _response(content: str = "## Respuesta") -> SimpleNamespace:

@@ -16,6 +16,7 @@ from poseidon.console import configure_utf8_output
 from poseidon.core import GateError, PhaseRunner, PoseidonError
 from poseidon.herdr_delegator import HerdrDelegator
 from poseidon.spec_state_machine import SpecStateMachine
+from poseidon.version import get_version
 
 app = typer.Typer(
     name="poseidon",
@@ -48,6 +49,14 @@ def _display_path(path: Path) -> str:
         return path.relative_to(Path.cwd()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _version_callback(value: bool) -> None:
+    """Print the version and exit before any command runs."""
+    if not value:
+        return
+    typer.echo(f"poseidon {get_version()}")
+    raise typer.Exit()
 
 
 def _discover_specs() -> list[Path]:
@@ -141,7 +150,17 @@ def _wizard_defaults(
 
 
 @app.callback()
-def cli() -> None:
+def cli(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the Poseidon version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
     """Orchestrate Keel Nav phases without keeping state between runs."""
 
 

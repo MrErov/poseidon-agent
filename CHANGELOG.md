@@ -1,3 +1,13 @@
+## [3.7.0] - 2026-11-26
+### Added
+- **Responsive TUI:** breakpoints collapse the phase sidebar into a selector on narrow terminals and show a minimum-size notice when the terminal is too small.
+- **Theme-aware styling:** the Textual UI uses design tokens (`$primary`, `$surface`, `$panel`, `$accent`, `$success`, `$warning`, `$error`) instead of hardcoded colors, so light and dark themes stay readable.
+- **Live progress feedback:** a spinner plus symbolic status (`● Ready`, `✓ Completed`, `! Cancelled`, `✗ Error`) makes long-running phases visibly active.
+- **Standalone binary build:** `build.spec`, `scripts/build_binary.sh`, and `scripts/build_binary.ps1` produce a one-file PyInstaller executable.
+
+### Changed
+- TUI tests cover wide, narrow, and tiny layouts, phase selection, spinner visibility, cancellation, and error states.
+
 ## [3.6.1] - 2026-11-26
 ### Fixed
 - **English auto-detect message:** the smart-defaults notice now reads `ℹ️ Auto-detected spec: ...`, completing the CLI localization.
