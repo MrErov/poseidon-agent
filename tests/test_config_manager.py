@@ -303,3 +303,58 @@ def test_phase_timeout_must_be_positive(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigValidationError, match="greater than zero"):
         ConfigManager(config).resolve("1b")
+
+
+def test_default_role_applies_when_phase_has_no_mapping(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+
+    result = ConfigManager(config).resolve("3")
+
+    assert result.role == "tester"
+    assert result.executor == "herdr"
+
+
+def test_configured_default_role_overrides_tester_fallback(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        """version: 2
+default_role: architect
+roles:
+  architect:
+    executor: api
+    model: nvidia_nim/architect-model
+  tester:
+    executor: api
+    model: nvidia_nim/tester-model
+""",
+        encoding="utf-8",
+    )
+
+    result = ConfigManager(config).resolve("3")
+
+    assert result.role == "architect"
+    assert result.model == "nvidia_nim/architect-model"
+
+
+def test_default_role_property_falls_back_to_tester(tmp_path: Path) -> None:
+    assert ConfigManager(tmp_path / "missing.yaml").default_role == "tester"
+
+
+def test_default_role_must_be_a_string(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("default_role: 1\n", encoding="utf-8")
+
+    with pytest.raises(ConfigValidationError, match="default_role"):
+        _ = ConfigManager(config).default_role
+
+
+def test_default_role_must_reference_a_defined_role(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "default_role: missing\nroles:\n  tester:\n    executor: api\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigValidationError, match="undefined role"):
+        _ = ConfigManager(config).default_role

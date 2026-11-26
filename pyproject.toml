@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "poseidon-agent"
-version = "3.5.7"
+version = "3.6.0"
 description = "Motor de ejecución determinista y orquestador de fases para Keel Nav."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,7 @@ dependencies = [
     "litellm>=1.60,<2",
     "python-dotenv>=1.0,<2",
     "pyyaml>=6.0,<7",
+    "questionary>=2.0,<3",
     "rich>=13.7,<15",
     "textual>=0.85,<10",
     "typer>=0.16,<1",

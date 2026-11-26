@@ -1,5 +1,7 @@
 version: 2
 
+default_role: tester
+
 roles:
   architect:
     executor: api

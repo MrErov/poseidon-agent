@@ -47,11 +47,12 @@ class ExecutionConfig:
 class ConfigManager:
     """Resolve agent roles without imposing a configuration on other projects."""
 
+    DEFAULT_ROLE = "tester"
     _VALID_EXECUTORS = {"api", "claude-code", "codex", "opencode", "herdr"}
     _VALID_RUNTIMES = {"api", "herdr"}
     _VALID_MODES = {"persistent", "headless"}
     _VALID_LAUNCHES = {"interactive", "headless_in_terminal"}
-    _TOP_LEVEL_KEYS = {"version", "roles", "phase_roles", "herdr"}
+    _TOP_LEVEL_KEYS = {"version", "default_role", "roles", "phase_roles", "herdr"}
     _ROLE_KEYS = {"executor", "model", "runtime", "agent", "name_prefix", "herdr"}
     _HERDR_DEFAULTS = {
         "executable": "hc",
@@ -93,6 +94,13 @@ class ConfigManager:
             Path(config_path) if config_path is not None else Path.cwd() / "config.yaml"
         )
 
+    @property
+    def default_role(self) -> str:
+        """Return the configured default role, falling back to ``tester``."""
+        data = self._load_and_validate()
+        value = data.get("default_role")
+        return value or self.DEFAULT_ROLE
+
     def resolve(
         self,
         phase: str,
@@ -109,6 +117,10 @@ class ConfigManager:
         normalized_phase = phase.strip().lower()
         phase_id = _PHASE_IDS.get(normalized_phase, normalized_phase)
         selected_role = role or phase_roles.get(phase_id)
+        if selected_role is None:
+            default_role = data.get("default_role") or self.DEFAULT_ROLE
+            if default_role in roles:
+                selected_role = default_role
         base_herdr = self._HERDR_DEFAULTS | dict(data.get("herdr", {}) or {})
         self._validate_herdr_settings(base_herdr)
 
@@ -325,9 +337,18 @@ class ConfigManager:
                 f"Unknown top-level configuration keys: {sorted(unknown_keys)}"
             )
 
+        default_role = data.get("default_role")
+        if default_role is not None and not isinstance(default_role, str):
+            raise ConfigValidationError("'default_role' must be a string")
+
         roles = data.get("roles", {})
         if not isinstance(roles, dict):
             raise ConfigError("The 'roles' section must be a mapping.")
+
+        if default_role is not None and default_role not in roles:
+            raise ConfigValidationError(
+                f"'default_role' references undefined role '{default_role}'"
+            )
 
         for role_name, role_settings in roles.items():
             if not isinstance(role_settings, dict):

@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from poseidon.main import app
@@ -237,3 +238,108 @@ def test_cli_resume_does_not_launch_new_execution(tmp_path: Path, monkeypatch) -
     from_settings.assert_called_once()
     herdr.resume.assert_called_once_with("t19")
     herdr.execute.assert_not_called()
+
+
+def test_cli_auto_detects_single_spec(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Goldfish instructions", encoding="utf-8"
+    )
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    spec = specs_dir / "US-002.spec.md"
+    spec.write_text("---\nstatus: draft\n---\n# US-002\n", encoding="utf-8")
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response("---\nverdict: audited\n---\n# Audit"),
+    ) as completion:
+        result = cli.invoke(app, ["run", "--phase", "1b", "--model", "modelo"])
+
+    assert result.exit_code == 0, result.output
+    assert "ℹ️ Auto-detectado spec: specs/US-002.spec.md" in result.output
+    prompt = completion.call_args.kwargs["messages"][1]["content"]
+    assert "# US-002" in prompt
+
+
+@pytest.mark.parametrize("args", [["run"], ["run", "-i"]])
+def test_cli_wizard_runs_selected_phase(
+    args: list[str], tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Goldfish instructions", encoding="utf-8"
+    )
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    (specs_dir / "US-002.spec.md").write_text(
+        "---\nstatus: draft\n---\n# US-002\n", encoding="utf-8"
+    )
+    (tmp_path / "config.yaml").write_text(
+        """version: 2
+default_role: tester
+roles:
+  tester:
+    executor: api
+    model: test-model
+""",
+        encoding="utf-8",
+    )
+    answers = iter(["1b", "specs/US-002.spec.md", "tester"])
+    questions: list[str] = []
+
+    def fake_select(message, choices=None, default=None):
+        questions.append(message)
+        return SimpleNamespace(ask=lambda: next(answers))
+
+    with (
+        patch("poseidon.main.questionary.select", side_effect=fake_select),
+        patch(
+            "poseidon.core.litellm.completion",
+            return_value=_response("---\nverdict: audited\n---\n# Audit"),
+        ) as completion,
+    ):
+        result = cli.invoke(app, args)
+
+    assert result.exit_code == 0, result.output
+    assert questions == ["Phase:", "Spec:", "Role:"]
+    completion.assert_called_once()
+
+
+def test_status_shows_phases_specs_and_default_role(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "02-egm-goldfish-audit.md").write_text(
+        "Goldfish instructions", encoding="utf-8"
+    )
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    (specs_dir / "US-002.spec.md").write_text(
+        "---\nstatus: certified\n---\n# US-002\n", encoding="utf-8"
+    )
+    (tmp_path / "config.yaml").write_text(
+        """version: 2
+default_role: tester
+roles:
+  tester:
+    executor: api
+    model: test-model
+""",
+        encoding="utf-8",
+    )
+
+    result = cli.invoke(app, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "Default role" in result.output
+    assert "tester" in result.output
+    assert "1b" in result.output
+    assert "specs/US-002.spec.md" in result.output
+    assert "certified" in result.output

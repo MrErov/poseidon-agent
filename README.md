@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.7-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.6.0-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-152%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-161%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -135,6 +135,19 @@ poseidon run --phase 1a --spec specs/US-001.md --context docs/context/api.md --m
 poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<available-model>
 ```
 
+### Smart Defaults & Interactive Wizard
+
+`--spec` and `--role` are optional:
+
+```bash
+poseidon run --phase 1b
+```
+
+- When `specs/` contains exactly one `*.spec.md`, Poseidón uses it and prints `ℹ️ Auto-detectado spec: specs/US-002.spec.md`.
+- The role is resolved from `--role`, then `phase_roles`, then `default_role` in `config.yaml`, and finally `tester`.
+- `poseidon run` without arguments or with `-i` opens a wizard for phase, spec, and role.
+- `poseidon status` prints a Rich table with available phases, each spec's `status:`, and the default role.
+
 ### Local Executors
 
 With `--executor api` (default) `--model` is required. Otherwise the CLI manages its own auth:
@@ -157,6 +170,7 @@ All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Overr
 
 ```yaml
 version: 2
+default_role: tester
 roles:
   architect: { executor: api, model: nvidia_nim/moonshotai/kimi-k2-instruct }
   tester:    { executor: opencode, model: nvidia/nvidia/nemotron-3-ultra-550b-a55b, runtime: herdr, name_prefix: poseidon-tester }
@@ -271,6 +285,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.6.0** — Interactive wizard, smart defaults, and `poseidon status`.
 - **v3.5.7** — English CLI/TUI messages and strict US-002 re-audit.
 - **v3.5.6** — Drift verdict frontmatter contract and US-002 certification.
 - **v3.5.5** — Truncated headless output and idempotent state transitions.

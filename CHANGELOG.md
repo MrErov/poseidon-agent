@@ -1,3 +1,14 @@
+## [3.6.0] - 2026-11-26
+### Added
+- **Interactive wizard:** `poseidon run` without arguments or with `-i` asks for phase, spec, and role.
+- **Status dashboard:** `poseidon status` renders a Rich table with available phases, every spec's `status:`, and the default role.
+- **Smart defaults:** `--spec` is auto-detected when `specs/` contains exactly one `*.spec.md`; `--role` falls back to `default_role` from `config.yaml`, then `tester`.
+- **Questionary dependency** for the interactive wizard.
+
+### Changed
+- `--phase` on `poseidon run` is optional to enable the wizard.
+- Added tests for auto-detection, wizard flow, default role resolution, and status output.
+
 ## [3.5.7] - 2026-11-26
 ### Changed
 - **English CLI/TUI:** every user-facing message from the CLI, phase runner, Herdr delegation, prompt framing, and errors is now English.

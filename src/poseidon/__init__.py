@@ -26,7 +26,7 @@ from poseidon.execution_engine import ExecutionEngine
 from poseidon.prompt_builder import PromptBuilder
 from poseidon.spec_state_machine import SpecStateMachine
 
-__version__ = "3.5.7"
+__version__ = "3.6.0"
 
 __all__ = [
     "__version__",
