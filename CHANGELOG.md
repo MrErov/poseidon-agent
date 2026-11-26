@@ -1,3 +1,11 @@
+## [3.5.4] - 2026-11-26
+### Fixed
+- **Lifecycle state gap:** `SpecStatus` now models `implemented`, the state the Keel Nav protocol requires between audit and drift. Adds `audited|approved -> implemented` and `implemented -> observed|certified`.
+- **Phase 2 state ownership:** a successful TDD run advances the spec to `implemented` atomically and instructs the agent not to edit `status`, `goldfish_audit`, or `drift_report`. If the agent applied the state itself, Poseidon keeps it and warns instead of failing.
+
+### Added
+- Tests for the TDD transition, agent-edited `implemented` status, drift certification from `implemented`, and ODD observation from `implemented`.
+
 ## [3.5.3] - 2026-11-24
 ### Fixed
 - **Artifact ownership:** Poseidon calculates and injects exact report paths, reads the actual artifact instead of raw terminal output, validates frontmatter, and uses coherent newer reports as fallback.

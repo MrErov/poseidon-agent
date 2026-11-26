@@ -23,6 +23,7 @@ class PromptBuilder:
         context: str | None = None,
         graph_context: str | None = None,
         artifact_path: Path | None = None,
+        preserve_spec_state: bool = False,
     ) -> list[dict[str, str]]:
         """Crea una lista nueva de mensajes; nunca reutiliza historial previo."""
         if spec_path is None:
@@ -45,6 +46,13 @@ class PromptBuilder:
                 "--- POSEIDON ARTIFACT OWNERSHIP ---\n"
                 f"Write your artifact to '{artifact_path.as_posix()}' "
                 "(exact path; do not choose another).\n"
+                "Do not change 'status', 'goldfish_audit', or "
+                "'drift_report' in the spec frontmatter.\n"
+                "Poseidon will apply the state transition itself."
+            )
+        elif preserve_spec_state:
+            blocks.append(
+                "--- POSEIDON SPEC OWNERSHIP ---\n"
                 "Do not change 'status', 'goldfish_audit', or "
                 "'drift_report' in the spec frontmatter.\n"
                 "Poseidon will apply the state transition itself."

@@ -118,6 +118,7 @@ class PhaseRunner:
             context=context,
             graph_context=graph_context,
             artifact_path=artifact_path,
+            preserve_spec_state=phase_kind == "tdd",
         )
 
         content = self.execution_engine.execute(
@@ -145,7 +146,7 @@ class PhaseRunner:
             )
         else:
             artifact_path = self._save_artifact(phase_kind, content, spec_file, context_file)
-        if phase_kind in {"goldfish", "odd", "drift"}:
+        if phase_kind in {"goldfish", "odd", "drift", "tdd"}:
             self._update_spec_metadata(spec_file, content, artifact_path, phase_kind)
 
         return content
@@ -200,6 +201,18 @@ class PhaseRunner:
             target_status = SpecStatus.AUDITED
             report_field = "goldfish_audit"
             success_message = "✅ Spec actualizado a status: audited"
+        elif phase_kind == "tdd":
+            target_status = SpecStatus.IMPLEMENTED
+            report_field = None
+            success_message = "✅ Spec actualizado a status: implemented"
+            if self.state_machine.read_status(spec_path) == target_status:
+                self.console.print(
+                    "⚠️ El spec ya estaba en status: implemented; "
+                    "Poseidón no reescribió el estado.",
+                    style="yellow",
+                    markup=False,
+                )
+                return
         elif phase_kind == "odd":
             verdict = self._extract_strict_verdict(report_content, "odd")
             if verdict not in {"approved", "observed"}:

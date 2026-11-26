@@ -12,6 +12,7 @@ class SpecStatus(str, Enum):
     DRAFT = "draft"
     AUDITED = "audited"
     APPROVED = "approved"
+    IMPLEMENTED = "implemented"
     OBSERVED = "observed"
     CERTIFIED = "certified"
 
@@ -19,8 +20,17 @@ class SpecStatus(str, Enum):
 # Transiciones permitidas: estado_origen -> {estados_destino_permitidos}
 VALID_TRANSITIONS: dict[SpecStatus, set[SpecStatus]] = {
     SpecStatus.DRAFT: {SpecStatus.AUDITED},
-    SpecStatus.AUDITED: {SpecStatus.APPROVED, SpecStatus.OBSERVED},
-    SpecStatus.APPROVED: {SpecStatus.OBSERVED, SpecStatus.CERTIFIED},
+    SpecStatus.AUDITED: {
+        SpecStatus.APPROVED,
+        SpecStatus.IMPLEMENTED,
+        SpecStatus.OBSERVED,
+    },
+    SpecStatus.APPROVED: {
+        SpecStatus.IMPLEMENTED,
+        SpecStatus.OBSERVED,
+        SpecStatus.CERTIFIED,
+    },
+    SpecStatus.IMPLEMENTED: {SpecStatus.OBSERVED, SpecStatus.CERTIFIED},
     SpecStatus.OBSERVED: {SpecStatus.CERTIFIED},
     SpecStatus.CERTIFIED: set(),
 }

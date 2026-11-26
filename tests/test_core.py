@@ -681,6 +681,102 @@ def test_drifted_verdict_keeps_spec_unchanged(
     assert "❌ Drift rechazado. El spec no puede ser certificado" in output.getvalue()
 
 
+def test_tdd_phase_transitions_audited_spec_to_implemented(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="2", spec_name="specs/US-002.spec.md")
+    spec_file.write_text(
+        "---\n"
+        "us_id: US-002\n"
+        "status: audited\n"
+        "goldfish_audit: specs/US-002.audit.4.md\n"
+        "drift_report: pending\n"
+        "---\n"
+        "# US-002\n",
+        encoding="utf-8",
+    )
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    with patch(
+        "poseidon.core.litellm.completion", return_value=_response("# Implementación TDD")
+    ) as completion:
+        runner.run("2", str(spec_file), "modelo")
+
+    updated = spec_file.read_text(encoding="utf-8")
+    assert "status: implemented" in updated
+    assert "goldfish_audit: specs/US-002.audit.4.md" in updated
+    assert "drift_report: pending" in updated
+    assert "Spec actualizado a status: implemented" in output.getvalue()
+    prompt = completion.call_args.kwargs["messages"][1]["content"]
+    assert "Do not change 'status'" in prompt
+    assert "Poseidon will apply the state transition itself" in prompt
+
+
+def test_tdd_phase_tolerates_agent_applied_implemented_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="2", spec_name="specs/US-002.spec.md")
+    spec_file.write_text(
+        "---\nstatus: audited\n---\n# US-002\n", encoding="utf-8"
+    )
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    def _agent_edits_spec(*args, **kwargs):
+        spec_file.write_text(
+            "---\nstatus: implemented\n---\n# US-002\n", encoding="utf-8"
+        )
+        return _response("# Implementación TDD")
+
+    with patch("poseidon.core.litellm.completion", side_effect=_agent_edits_spec):
+        runner.run("2", str(spec_file), "modelo")
+
+    assert "status: implemented" in spec_file.read_text(encoding="utf-8")
+    assert "ya estaba en status: implemented" in output.getvalue()
+
+
+def test_drift_certifies_implemented_spec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="4", spec_name="specs/US-002.spec.md")
+    spec_file.write_text(
+        "---\nstatus: implemented\ndrift_report: pending\n---\n# US-002\n",
+        encoding="utf-8",
+    )
+    output = StringIO()
+    runner = _runner(tmp_path, monkeypatch, output)
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response("---\neffective_verdict: no-drift\n---\n"),
+    ):
+        runner.run("4", str(spec_file), "modelo")
+
+    updated = spec_file.read_text(encoding="utf-8")
+    assert "status: certified" in updated
+    assert "drift_report: specs/US-002.drift.1.md" in updated
+    assert "✅ Drift certificado" in output.getvalue()
+
+
+def test_odd_approved_after_implemented_updates_spec_to_observed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, phase="odd", spec_name="specs/US-002.spec.md")
+    spec_file.write_text(
+        "---\nstatus: implemented\n---\n# US-002\n", encoding="utf-8"
+    )
+    runner = _runner(tmp_path, monkeypatch, StringIO())
+
+    with patch(
+        "poseidon.core.litellm.completion",
+        return_value=_response("---\neffective_verdict: approved\n---\n"),
+    ):
+        runner.run("odd", str(spec_file), "modelo")
+
+    assert "status: observed" in spec_file.read_text(encoding="utf-8")
+
+
 def test_herdr_executor_uses_persistent_delegator(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
