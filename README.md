@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.6-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.7-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -271,6 +271,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.5.7** — English CLI/TUI messages and strict US-002 re-audit.
 - **v3.5.6** — Drift verdict frontmatter contract and US-002 certification.
 - **v3.5.5** — Truncated headless output and idempotent state transitions.
 - **v3.5.4** — `implemented` lifecycle state, Phase 2 atomic state ownership, and drift from implementation.

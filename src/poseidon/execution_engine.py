@@ -1,4 +1,4 @@
-"""Motor de ejecución: llama a LiteLLM o delega a CLIs locales/Herdr."""
+"""Execution engine: calls LiteLLM or delegates to local CLIs/Herdr."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ _LOCAL_EXECUTORS = {"claude-code", "codex", "opencode"}
 
 
 class ExecutionEngine:
-    """Ejecuta la inferencia usando API (LiteLLM) o delegación local."""
+    """Run inference through the API (LiteLLM) or local delegation."""
 
     def __init__(
         self,
@@ -36,13 +36,13 @@ class ExecutionEngine:
         phase_kind: str | None = None,
         artifact_path: Any = None,
     ) -> str:
-        """Ejecuta el prompt y retorna el contenido de la respuesta."""
+        """Execute the prompt and return the response content."""
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
-            raise InputValidationError(f"Executor no soportado: '{executor}'.")
+            raise InputValidationError(f"Unsupported executor: '{executor}'.")
         if executor == "api" and not (model_name and model_name.strip()):
             raise InputValidationError(
-                "El parámetro --model es obligatorio cuando executor='api'."
+                "The --model parameter is required when executor='api'."
             )
 
         if executor == "api":
@@ -68,7 +68,7 @@ class ExecutionEngine:
             )
         except Exception as exc:
             raise CompletionError(
-                f"No se pudo ejecutar con el modelo '{model_name}': {exc}"
+                f"Could not run with model '{model_name}': {exc}"
             ) from exc
         return self._extract_content(response)
 
@@ -92,14 +92,14 @@ class ExecutionEngine:
             else:
                 return self.delegator.execute(prompt, executor, model=model_name)
         except DelegationError as exc:
-            raise CompletionError(f"No se pudo ejecutar con '{executor}': {exc}") from exc
+            raise CompletionError(f"Could not execute with '{executor}': {exc}") from exc
 
     @staticmethod
     def _extract_content(response: Any) -> str:
         try:
             content = response.choices[0].message.content
         except (AttributeError, IndexError, TypeError) as exc:
-            raise CompletionError("Respuesta con formato inesperado.") from exc
+            raise CompletionError("Unexpected response format.") from exc
         if not isinstance(content, str) or not content.strip():
-            raise CompletionError("Respuesta vacía o sin contenido de texto.")
+            raise CompletionError("Empty response or no text content.")
         return content

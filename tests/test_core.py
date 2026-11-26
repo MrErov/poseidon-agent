@@ -87,7 +87,7 @@ def test_goldfish_uses_fresh_hot_memory_on_every_run(
     assert second_call["temperature"] == 0.0
 
     rendered = output.getvalue()
-    assert rendered.count("Aislando Memoria para Goldfish") == 2
+    assert rendered.count("Isolating memory for Goldfish") == 2
     assert "Primera auditoría" in rendered
     assert "Segunda auditoría" in rendered
 
@@ -108,7 +108,7 @@ def test_phase_1a_saves_generated_spec(
     artifact = tmp_path / "specs" / "US-001.spec.md"
     assert artifact.is_file()
     assert artifact.read_text(encoding="utf-8") == "---\nstatus: draft\n---\n# US-001"
-    assert "Guardado en specs/US-001.spec.md" in output.getvalue()
+    assert "Saved to specs/US-001.spec.md" in output.getvalue()
 
 
 def test_goldfish_phase_increments_existing_audit_number(
@@ -131,7 +131,7 @@ def test_goldfish_phase_increments_existing_audit_number(
     assert artifact.is_file()
     assert artifact.read_text(encoding="utf-8") == "## Segunda auditoría"
     assert (specs_dir / "US-001.audit.1.md").read_text(encoding="utf-8") == "Auditoría previa"
-    assert "Guardado en specs/US-001.audit.2.md" in output.getvalue()
+    assert "Saved to specs/US-001.audit.2.md" in output.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -168,7 +168,7 @@ def test_goldfish_audited_updates_spec_frontmatter(
     assert "us_id: US-001" in updated
     assert "created_at: 2026-01-01" in updated
     assert "# US-001\n\nContenido de prueba." in updated
-    assert "✅ Spec actualizado a status: audited" in output.getvalue()
+    assert "✅ Spec updated to status: audited" in output.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -198,7 +198,7 @@ def test_goldfish_rejected_keeps_spec_unchanged(
         runner.run("1b", str(spec_file), "modelo")
 
     assert spec_file.read_text(encoding="utf-8") == original_spec
-    assert "⚠️ Auditoría rechazada. El spec sigue en draft." in output.getvalue()
+    assert "⚠️ Audit rejected. The spec remains in draft." in output.getvalue()
     assert (tmp_path / "specs" / "US-001.audit.1.md").is_file()
 
 
@@ -221,11 +221,11 @@ def test_context_is_injected_before_spec(
         )
 
     user_content = completion.call_args.kwargs["messages"][1]["content"]
-    assert "--- INICIO DEL CONTEXTO ---" in user_content
-    assert "--- FIN DEL CONTEXTO ---" in user_content
+    assert "--- CONTEXT START ---" in user_content
+    assert "--- CONTEXT END ---" in user_content
     assert user_content.index("Contexto de API") < user_content.index("Contenido de prueba")
-    assert user_content.index("--- FIN DEL CONTEXTO ---") < user_content.index(
-        "--- INICIO DE LA ESPECIFICACIÓN ---"
+    assert user_content.index("--- CONTEXT END ---") < user_content.index(
+        "--- SPECIFICATION START ---"
     )
 
 
@@ -236,7 +236,7 @@ def test_missing_context_stops_before_calling_litellm(
     runner = _runner(tmp_path, monkeypatch, StringIO())
 
     with patch("poseidon.core.litellm.completion") as completion:
-        with pytest.raises(InputValidationError, match="contexto"):
+        with pytest.raises(InputValidationError, match="Context file"):
             runner.run(
                 "1b",
                 str(spec_file),
@@ -257,7 +257,7 @@ def test_goldfish_detection_uses_phase_name(
     with patch("poseidon.core.litellm.completion", return_value=_response("Auditado")):
         runner.run("02-egm-goldfish-audit", str(spec_file), "modelo")
 
-    assert "Aislando Memoria para Goldfish" in output.getvalue()
+    assert "Isolating memory for Goldfish" in output.getvalue()
 
 
 def test_non_goldfish_phase_allows_missing_spec(
@@ -272,8 +272,8 @@ def test_non_goldfish_phase_allows_missing_spec(
     ) as completion:
         runner.run("1a", None, "openai/gpt-4o-mini")
 
-    assert "Aislando Memoria para Goldfish" not in output.getvalue()
-    assert "No se proporcionó una especificación" in completion.call_args.kwargs["messages"][1][
+    assert "Isolating memory for Goldfish" not in output.getvalue()
+    assert "No input specification was provided" in completion.call_args.kwargs["messages"][1][
         "content"
     ]
 
@@ -286,7 +286,7 @@ def test_missing_phase_stops_before_calling_litellm(
     runner = _runner(tmp_path, monkeypatch, StringIO())
 
     with patch("poseidon.core.litellm.completion") as completion:
-        with pytest.raises(InputValidationError, match="Memoria Fría"):
+        with pytest.raises(InputValidationError, match="Cold memory"):
             runner.run("1b", str(spec_file), "modelo")
 
     completion.assert_not_called()
@@ -299,7 +299,7 @@ def test_missing_spec_stops_before_calling_litellm(
     runner = _runner(tmp_path, monkeypatch, StringIO())
 
     with patch("poseidon.core.litellm.completion") as completion:
-        with pytest.raises(InputValidationError, match="especificación"):
+        with pytest.raises(InputValidationError, match="Specification file"):
             runner.run("1b", str(tmp_path / "missing.md"), "modelo")
 
     completion.assert_not_called()
@@ -310,7 +310,7 @@ def test_phase_name_cannot_escape_skills_directory(
 ) -> None:
     runner = _runner(tmp_path, monkeypatch, StringIO())
 
-    with pytest.raises(InputValidationError, match="solo puede contener"):
+    with pytest.raises(InputValidationError, match="may contain only"):
         runner.run("../1b", None, "modelo")
 
 
@@ -371,7 +371,7 @@ def test_unknown_phase_without_match_raises(
     runner = _runner(tmp_path, monkeypatch, StringIO())
     (tmp_path / ".meta-skills").mkdir()
 
-    with pytest.raises(InputValidationError, match="Memoria Fría"):
+    with pytest.raises(InputValidationError, match="Cold memory"):
         runner._resolve_phase_file("does-not-exist")
 
 
@@ -393,9 +393,9 @@ def test_gatekeeper_blocks_draft_spec(
         with pytest.raises(GateError) as exc_info:
             runner.run(phase, str(spec_file), "modelo")
 
-    assert "GATEKEEPER BLOQUEÓ LA FASE" in str(exc_info.value)
-    assert "status actual: draft" in str(exc_info.value)
-    assert "Fase 1b primero" in str(exc_info.value)
+    assert "GATEKEEPER BLOCKED THE PHASE" in str(exc_info.value)
+    assert "current status: draft" in str(exc_info.value)
+    assert "Run Phase 1b first" in str(exc_info.value)
     completion.assert_not_called()
 
 
@@ -504,7 +504,7 @@ def test_verdict_injected_in_prose_is_ignored(
     updated = spec_file.read_text(encoding="utf-8")
     assert "status: draft" in updated
     assert "status: audited" not in updated
-    assert "⚠️ Auditoría rechazada. El spec sigue en draft." in output.getvalue()
+    assert "⚠️ Audit rejected. The spec remains in draft." in output.getvalue()
 
 
 @pytest.mark.parametrize("status", ["audited", "approved"])
@@ -538,7 +538,7 @@ def test_context_bootstrap_runs_without_spec(
     assert result == "# Mapa del repositorio"
     completion.assert_called_once()
     prompt = completion.call_args.kwargs["messages"][1]["content"]
-    assert "No se proporcionó una especificación" in prompt
+    assert "No input specification was provided" in prompt
 
 
 @pytest.mark.parametrize("phase", ["1a", "1b"])
@@ -570,9 +570,9 @@ def test_graphify_output_is_injected_into_prompt(
     fetch_graph.assert_called_once_with(str(spec_file))
     prompt = completion.call_args.kwargs["messages"][1]["content"]
     assert "core -> cli" in prompt
-    assert "--- INICIO DEL GRAFO DE CÓDIGO (Graphify MCP) ---" in prompt
-    assert prompt.index("INICIO DEL CONTEXTO") < prompt.index("INICIO DEL GRAFO")
-    assert prompt.index("INICIO DEL GRAFO") < prompt.index("INICIO DE LA ESPECIFICACIÓN")
+    assert "--- CODE GRAPH START (Graphify MCP) ---" in prompt
+    assert prompt.index("CONTEXT START") < prompt.index("CODE GRAPH START")
+    assert prompt.index("CODE GRAPH START") < prompt.index("SPECIFICATION START")
 
 
 def test_claude_code_executor_uses_subprocess_instead_of_litellm(
@@ -614,7 +614,7 @@ def test_odd_phase_saves_observation_artifact(
     observation = tmp_path / "specs" / "spec.observation.md"
     assert observation.is_file()
     assert observation.read_text(encoding="utf-8") == "# Observación runtime"
-    assert "Observación ODD guardada" in output.getvalue()
+    assert "✅ ODD observation saved" in output.getvalue()
 
 
 def test_odd_approved_report_updates_spec_to_observed(
@@ -659,7 +659,7 @@ def test_drift_certifies_spec_and_increments_round(
     updated = spec_file.read_text(encoding="utf-8")
     assert "status: certified" in updated
     assert "drift_report: specs/spec.drift.2.md" in updated
-    assert "✅ Drift certificado. Spec actualizado a status: certified" in output.getvalue()
+    assert "✅ Drift certified. Spec updated to status: certified" in output.getvalue()
 
 
 def test_drifted_verdict_keeps_spec_unchanged(
@@ -678,7 +678,7 @@ def test_drifted_verdict_keeps_spec_unchanged(
         runner.run("4", str(spec_file), "modelo")
 
     assert spec_file.read_text(encoding="utf-8") == original
-    assert "❌ Drift rechazado. El spec no puede ser certificado" in output.getvalue()
+    assert "❌ Drift rejected. The spec cannot be certified" in output.getvalue()
 
 
 def test_tdd_phase_transitions_audited_spec_to_implemented(
@@ -707,7 +707,7 @@ def test_tdd_phase_transitions_audited_spec_to_implemented(
     assert "status: implemented" in updated
     assert "goldfish_audit: specs/US-002.audit.4.md" in updated
     assert "drift_report: pending" in updated
-    assert "Spec actualizado a status: implemented" in output.getvalue()
+    assert "Spec updated to status: implemented" in output.getvalue()
     prompt = completion.call_args.kwargs["messages"][1]["content"]
     assert "Do not change 'status'" in prompt
     assert "Poseidon will apply the state transition itself" in prompt
@@ -733,7 +733,7 @@ def test_tdd_phase_tolerates_agent_applied_implemented_status(
         runner.run("2", str(spec_file), "modelo")
 
     assert "status: implemented" in spec_file.read_text(encoding="utf-8")
-    assert "ya estaba en status: implemented" in output.getvalue()
+    assert "Poseidon did not rewrite it" in output.getvalue()
 
 
 def test_drift_certifies_implemented_spec(
@@ -756,7 +756,7 @@ def test_drift_certifies_implemented_spec(
     updated = spec_file.read_text(encoding="utf-8")
     assert "status: certified" in updated
     assert "drift_report: specs/US-002.drift.1.md" in updated
-    assert "✅ Drift certificado" in output.getvalue()
+    assert "✅ Drift certified" in output.getvalue()
 
 
 def test_drift_certifies_when_agent_already_applied_certified(
@@ -783,7 +783,7 @@ def test_drift_certifies_when_agent_already_applied_certified(
     updated = spec_file.read_text(encoding="utf-8")
     assert "status: certified" in updated
     assert "drift_report: specs/US-002.drift.1.md" in updated
-    assert "✅ Drift certificado" in output.getvalue()
+    assert "✅ Drift certified" in output.getvalue()
 
 
 def test_odd_approved_after_implemented_updates_spec_to_observed(

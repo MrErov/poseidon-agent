@@ -1,4 +1,4 @@
-"""Interfaz de línea de comandos de Poseidón."""
+"""Poseidón command-line interface."""
 
 from typing import Annotated
 
@@ -15,7 +15,7 @@ from poseidon.herdr_delegator import HerdrDelegator
 
 app = typer.Typer(
     name="poseidon",
-    help="Motor de ejecución determinista para las fases de Keel Nav.",
+    help="Deterministic execution engine for Keel Nav phases.",
     add_completion=False,
     no_args_is_help=True,
 )
@@ -23,13 +23,13 @@ error_console = Console(stderr=True)
 
 
 def _configure_utf8_output() -> None:
-    """Evita errores de consolas Windows heredadas con mensajes Unicode."""
+    """Avoid Unicode failures on legacy Windows consoles."""
     configure_utf8_output()
 
 
 @app.callback()
 def cli() -> None:
-    """Orquesta fases de Keel Nav sin mantener estado entre ejecuciones."""
+    """Orchestrate Keel Nav phases without keeping state between runs."""
 
 
 @app.command("run")
@@ -38,28 +38,28 @@ def run_phase(
         str,
         typer.Option(
             "--phase",
-            help="Fase o alias; por ejemplo: 1a, spec, 1b, goldfish, 2, tdd.",
+            help="Phase or alias; for example: 1a, spec, 1b, goldfish, 2, tdd.",
         ),
     ],
     spec: Annotated[
         str | None,
         typer.Option(
             "--spec",
-            help="Ruta al spec Markdown; opcional para Context Bootstrap y la Fase 1a.",
+            help="Path to the spec Markdown; optional for Context Bootstrap and Phase 1a.",
         ),
     ] = None,
     context: Annotated[
         str | None,
         typer.Option(
             "--context",
-            help="Ruta a un Markdown de contexto; se inyecta antes del spec.",
+            help="Path to a context Markdown; injected before the spec.",
         ),
     ] = None,
     model: Annotated[
         str | None,
         typer.Option(
             "--model",
-            help="Modelo de LiteLLM; obligatorio solo cuando executor='api'.",
+            help="LiteLLM model; required only when executor='api'.",
         ),
     ] = None,
     executor: Annotated[
@@ -92,7 +92,7 @@ def run_phase(
         ),
     ] = None,
 ) -> None:
-    """Ejecuta una fase mediante LiteLLM o un CLI local."""
+    """Execute a phase through LiteLLM or a local CLI."""
     _configure_utf8_output()
     load_dotenv()
     try:
@@ -112,7 +112,7 @@ def run_phase(
     if executor == "api" and not (model and model.strip()):
         error_console.print(
             "[bold red]Error:[/bold red] "
-            "[red]--model es obligatorio cuando --executor=api.[/red]"
+            "[red]--model is required when --executor=api.[/red]"
         )
         raise typer.Exit(code=1)
 

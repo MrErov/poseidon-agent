@@ -1,3 +1,11 @@
+## [3.5.7] - 2026-11-26
+### Changed
+- **English CLI/TUI:** every user-facing message from the CLI, phase runner, Herdr delegation, prompt framing, and errors is now English.
+- **Strict audit traceability:** US-002 was re-audited at version 0.4.0 in round 5 (`audit.5`, 0 blocking findings); its `certified` status and drift report are preserved.
+
+### Added
+- Message assertions updated to the English output.
+
 ## [3.5.6] - 2026-11-26
 ### Fixed
 - **Drift verdict contract:** the Phase 4 prompt now declares the required `effective_verdict` frontmatter field (`no-drift | drifted | drifted-accepted`), and artifact validation accepts the plain `verdict` fallback defined by skill 05.

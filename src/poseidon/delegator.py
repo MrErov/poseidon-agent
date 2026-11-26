@@ -1,4 +1,4 @@
-"""Delegación de prompts a CLIs locales mediante subprocesos aislados."""
+"""Delegate prompts to local CLIs through isolated subprocesses."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from poseidon.exceptions import DelegationError
 
 
 class LocalCLIDelegator:
-    """Invoca CLIs sin shell, con timeout y captura explícita de salida."""
+    """Invoke CLIs without a shell, with explicit timeout and output capture."""
 
     _COMMANDS = {
         "claude-code": "claude",
@@ -31,20 +31,20 @@ class LocalCLIDelegator:
         executables: Mapping[str, str] | None = None,
     ) -> None:
         if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds debe ser mayor que cero")
+            raise ValueError("timeout_seconds must be greater than zero")
         self.timeout_seconds = timeout_seconds
         self._executables = dict(executables or {})
 
     def execute(self, prompt: str, cli_type: str, model: str | None = None) -> str:
-        """Envía un prompt al CLI seleccionado y devuelve su stdout textual."""
+        """Send a prompt to the selected CLI and return its textual stdout."""
         normalized_cli = cli_type.strip().lower()
         if normalized_cli not in self._COMMANDS:
             supported = ", ".join(sorted(self._COMMANDS))
             raise DelegationError(
-                f"CLI local no soportado: '{cli_type}'. Opciones: {supported}."
+                f"Unsupported local CLI: '{cli_type}'. Options: {supported}."
             )
         if not prompt.strip():
-            raise DelegationError("No se puede delegar un prompt vacío.")
+            raise DelegationError("Cannot delegate an empty prompt.")
 
         executable = self._resolve_executable(normalized_cli)
         if normalized_cli == "claude-code":
@@ -72,24 +72,24 @@ class LocalCLIDelegator:
             completed = subprocess.run(command, **run_options)
         except subprocess.TimeoutExpired as exc:
             raise DelegationError(
-                f"{normalized_cli} superó el timeout de {self.timeout_seconds} segundos."
+                f"{normalized_cli} exceeded the {self.timeout_seconds}-second timeout."
             ) from exc
         except OSError as exc:
             raise DelegationError(
-                f"No se pudo iniciar {normalized_cli} con '{executable}': {exc}"
+                f"Could not start {normalized_cli} with '{executable}': {exc}"
             ) from exc
 
         if completed.returncode != 0:
             details = self._error_details(completed.stderr, completed.stdout)
             raise DelegationError(
-                f"{normalized_cli} terminó con código {completed.returncode}: {details}"
+                f"{normalized_cli} exited with code {completed.returncode}: {details}"
             )
 
         output = (completed.stdout or "").strip()
         if not output:
             details = self._error_details(completed.stderr, "")
             raise DelegationError(
-                f"{normalized_cli} devolvió una salida vacía. {details}"
+                f"{normalized_cli} returned empty output. {details}"
             )
 
         return output
@@ -105,14 +105,14 @@ class LocalCLIDelegator:
         if executable is None:
             env_var = self._EXECUTABLE_ENV_VARS[cli_type]
             raise DelegationError(
-                f"No se encontró '{self._COMMANDS[cli_type]}' en PATH. "
-                f"Instálalo o configura {env_var}."
+                f"Could not find '{self._COMMANDS[cli_type]}' in PATH. "
+                f"Install it or set {env_var}."
             )
         return executable
 
     @classmethod
     def _error_details(cls, stderr: str | None, stdout: str | None) -> str:
-        details = (stderr or stdout or "Sin detalles adicionales.").strip()
+        details = (stderr or stdout or "No additional details.").strip()
         if len(details) > cls._MAX_ERROR_OUTPUT:
             return "…" + details[-cls._MAX_ERROR_OUTPUT :]
         return details

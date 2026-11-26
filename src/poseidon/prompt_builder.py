@@ -1,4 +1,4 @@
-"""Constructor de prompts para las fases de Keel Nav."""
+"""Prompt builder for Keel Nav phases."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ _FRONTMATTER_CONTRACTS = {
 
 
 class PromptBuilder:
-    """Construye la lista de mensajes (Memoria Caliente) para una ejecución."""
+    """Build the message list (hot memory) for one run."""
 
     def __init__(self, console=None):
         self.console = console
@@ -30,21 +30,21 @@ class PromptBuilder:
         preserve_spec_state: bool = False,
         phase_kind: str | None = None,
     ) -> list[dict[str, str]]:
-        """Crea una lista nueva de mensajes; nunca reutiliza historial previo."""
+        """Create a fresh message list; never reuse prior history."""
         if spec_path is None:
             intro = (
-                f"Ejecuta la fase '{phase}'.\n\n"
-                "No se proporcionó una especificación de entrada para esta fase."
+                f"Run phase '{phase}'.\n\n"
+                "No input specification was provided for this phase."
             )
         else:
-            intro = f"Ejecuta la fase '{phase}' sobre la especificación '{spec_path}'."
+            intro = f"Run phase '{phase}' against spec '{spec_path}'."
 
         blocks: list[str] = []
         if context is not None:
             blocks.append(
-                "--- INICIO DEL CONTEXTO ---\n"
+                "--- CONTEXT START ---\n"
                 f"{context}\n"
-                "--- FIN DEL CONTEXTO ---"
+                "--- CONTEXT END ---"
             )
         if artifact_path is not None:
             artifact_lines = [
@@ -79,15 +79,15 @@ class PromptBuilder:
             )
         if graph_context:
             blocks.append(
-                "--- INICIO DEL GRAFO DE CÓDIGO (Graphify MCP) ---\n"
+                "--- CODE GRAPH START (Graphify MCP) ---\n"
                 f"{graph_context}\n"
-                "--- FIN DEL GRAFO DE CÓDIGO (Graphify MCP) ---"
+                "--- CODE GRAPH END (Graphify MCP) ---"
             )
         if specification is not None:
             blocks.append(
-                "--- INICIO DE LA ESPECIFICACIÓN ---\n"
+                "--- SPECIFICATION START ---\n"
                 f"{specification}\n"
-                "--- FIN DE LA ESPECIFICACIÓN ---"
+                "--- SPECIFICATION END ---"
             )
 
         user_content = "\n\n".join([intro, *blocks])
@@ -99,7 +99,7 @@ class PromptBuilder:
 
     @staticmethod
     def format_for_cli(messages: list[dict[str, str]]) -> str:
-        """Serializa mensajes para pasarlos por stdin a un CLI local."""
+        """Serialize messages for stdin delivery to a local CLI."""
         return "\n\n".join(
             f"--- {msg['role'].upper()} ---\n{msg['content']}" for msg in messages
         )
@@ -110,7 +110,7 @@ class PromptBuilder:
         spec_file: Path | None,
         context_file: Path | None,
     ) -> str:
-        """Obtiene contexto de Graphify si está habilitado y la fase lo requiere."""
+        """Fetch Graphify context when enabled and required by the phase."""
         if phase_kind not in {"spec", "goldfish"}:
             return ""
 
@@ -126,5 +126,5 @@ class PromptBuilder:
         try:
             return fetch_graph_context(query)
         except Exception:
-            # Fallo tolerante: no interrumpir la ejecución
+            # Tolerant failure: do not interrupt the run
             return ""

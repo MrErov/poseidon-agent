@@ -173,14 +173,14 @@ class ConfigManager:
         if executor not in self._VALID_EXECUTORS:
             options = ", ".join(sorted(self._VALID_EXECUTORS))
             raise ConfigValidationError(
-                f"Executor '{executor}' no es válido. Opciones: {options}"
+                f"Invalid executor '{executor}'. Options: {options}"
             )
 
     def _validate_runtime(self, runtime: str) -> None:
         if runtime not in self._VALID_RUNTIMES:
             options = ", ".join(sorted(self._VALID_RUNTIMES))
             raise ConfigValidationError(
-                f"Runtime '{runtime}' no es válido. Opciones: {options}"
+                f"Invalid runtime '{runtime}'. Options: {options}"
             )
 
     def _validate_role_settings(self, settings: dict[str, Any], role_name: str) -> None:

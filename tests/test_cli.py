@@ -40,7 +40,7 @@ def test_run_command_executes_requested_phase(tmp_path: Path, monkeypatch) -> No
         )
 
     assert result.exit_code == 0, result.output
-    assert "Aislando Memoria para Goldfish" in result.output
+    assert "Isolating memory for Goldfish" in result.output
     assert "Respuesta" in result.output
     assert completion.call_args.kwargs["model"] == "deepseek/deepseek-chat"
 
@@ -93,7 +93,7 @@ def test_cli_reports_missing_phase_in_red_error_flow(tmp_path: Path, monkeypatch
 
     assert result.exit_code == 1
     assert "Error:" in result.output
-    assert "Memoria Fría" in result.output
+    assert "Cold memory" in result.output
     completion.assert_not_called()
 
 
@@ -123,7 +123,7 @@ def test_cli_reports_missing_spec_and_does_not_call_litellm(
 
     assert result.exit_code == 1
     assert "Error:" in result.output
-    assert "especificación" in result.output
+    assert "Specification file" in result.output
     completion.assert_not_called()
 
 
@@ -156,7 +156,7 @@ def test_cli_api_executor_requires_model(tmp_path: Path, monkeypatch) -> None:
         result = cli.invoke(app, ["run", "--phase", "0"])
 
     assert result.exit_code == 1
-    assert "--model es obligatorio" in result.output
+    assert "--model is required" in result.output
     completion.assert_not_called()
 
 

@@ -67,10 +67,10 @@ def test_delegator_preserves_executable_path_with_spaces() -> None:
 
 def test_delegator_raises_on_nonzero_return_code() -> None:
     delegator = LocalCLIDelegator(executables={"codex": "codex"})
-    completed = SimpleNamespace(returncode=2, stdout="", stderr="fallo de autenticación")
+    completed = SimpleNamespace(returncode=2, stdout="", stderr="authentication failure")
 
     with patch("poseidon.delegator.subprocess.run", return_value=completed):
-        with pytest.raises(DelegationError, match="código 2.*autenticación"):
+        with pytest.raises(DelegationError, match="code 2.*authentication"):
             delegator.execute("prompt", "codex")
 
 
@@ -84,5 +84,5 @@ def test_delegator_raises_on_timeout() -> None:
         "poseidon.delegator.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1),
     ):
-        with pytest.raises(DelegationError, match="timeout de 1 segundos"):
+        with pytest.raises(DelegationError, match="exceeded the 1-second timeout"):
             delegator.execute("prompt", "claude-code")

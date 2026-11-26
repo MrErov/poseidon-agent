@@ -1,4 +1,4 @@
-"""Núcleo de ejecución de fases de Poseidón (Orquestador)."""
+"""Poseidón phase execution core (orchestrator)."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from poseidon.types import (
 
 
 class PhaseRunner:
-    """Orquesta la ejecución de fases coordinando StateMachine, PromptBuilder y ExecutionEngine."""
+    """Orchestrate phase execution across StateMachine, PromptBuilder, and ExecutionEngine."""
 
     def __init__(
         self,
@@ -60,13 +60,13 @@ class PhaseRunner:
         executor: str = "api",
         herdr_agent: str | None = None,
     ) -> str:
-        """Valida y ejecuta una fase, guardando su artefacto cuando corresponda."""
+        """Validate and run a phase, saving its artifact when applicable."""
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
-            raise InputValidationError(f"Executor no soportado: '{executor}'.")
+            raise InputValidationError(f"Unsupported executor: '{executor}'.")
         if executor == "api" and not (model_name and model_name.strip()):
             raise InputValidationError(
-                "El parámetro --model es obligatorio cuando executor='api'."
+                "The --model parameter is required when executor='api'."
             )
 
         phase_file = self._resolve_phase_file(phase)
@@ -74,36 +74,36 @@ class PhaseRunner:
         spec_file = Path(spec_path) if spec_path else None
         context_file = Path(context_path) if context_path else None
 
-        # Validar gates usando el phase_kind resuelto
+        # Validate gates using the resolved phase_kind
         if phase_kind == "tdd":
             self.state_machine.validate_gate(spec_path, _ALLOWED_GATE_STATUSES)
 
         self._ensure_file(
             phase_file,
-            f"No se encontró la Memoria Fría para la fase '{phase}': {phase_file}",
+            f"Cold memory not found for phase '{phase}': {phase_file}",
         )
-        cold_memory = self._read_file(phase_file, "la Memoria Fría")
+        cold_memory = self._read_file(phase_file, "cold memory")
 
         specification: str | None = None
         if spec_file is not None:
             self._ensure_file(
-                spec_file, f"No se encontró el archivo de especificación: {spec_file}"
+                spec_file, f"Specification file not found: {spec_file}"
             )
-            specification = self._read_file(spec_file, "la especificación")
+            specification = self._read_file(spec_file, "the specification")
 
         context: str | None = None
         if context_file is not None:
             self._ensure_file(
-                context_file, f"No se encontró el archivo de contexto: {context_file}"
+                context_file, f"Context file not found: {context_file}"
             )
-            context = self._read_file(context_file, "el contexto")
+            context = self._read_file(context_file, "the context")
 
         graph_context = self.prompt_builder.fetch_graph_context_if_needed(
             phase_kind, spec_file, context_file
         )
 
         if phase_kind == "goldfish":
-            self.console.print("Aislando Memoria para Goldfish", style="bold yellow")
+            self.console.print("Isolating memory for Goldfish", style="bold yellow")
 
         artifact_path = (
             self._artifact_path(phase_kind, spec_file, context_file)
@@ -141,7 +141,7 @@ class PhaseRunner:
                 )
             artifact_path = owned_path
             self.console.print(
-                f"✅ Guardado en {self._display_path(artifact_path)}",
+                f"✅ Saved to {self._display_path(artifact_path)}",
                 style="green",
                 markup=False,
             )
@@ -170,11 +170,11 @@ class PhaseRunner:
             self.state_machine._atomic_write(artifact_path, clean_content)
         except OSError as exc:
             raise ArtifactSaveError(
-                f"No se pudo guardar el artefacto en {artifact_path}: {exc}"
+                f"Could not save the artifact to {artifact_path}: {exc}"
             ) from exc
 
         self.console.print(
-            f"✅ Guardado en {self._display_path(artifact_path)}",
+            f"✅ Saved to {self._display_path(artifact_path)}",
             style="green",
             markup=False,
         )
@@ -194,22 +194,22 @@ class PhaseRunner:
             verdict = self._extract_strict_verdict(report_content, "goldfish")
             if verdict != "audited":
                 self.console.print(
-                    "⚠️ Auditoría rechazada. El spec sigue en draft.",
+                    "⚠️ Audit rejected. The spec remains in draft.",
                     style="yellow",
                     markup=False,
                 )
                 return
             target_status = SpecStatus.AUDITED
             report_field = "goldfish_audit"
-            success_message = "✅ Spec actualizado a status: audited"
+            success_message = "✅ Spec updated to status: audited"
         elif phase_kind == "tdd":
             target_status = SpecStatus.IMPLEMENTED
             report_field = None
-            success_message = "✅ Spec actualizado a status: implemented"
+            success_message = "✅ Spec updated to status: implemented"
             if self.state_machine.read_status(spec_path) == target_status:
                 self.console.print(
-                    "⚠️ El spec ya estaba en status: implemented; "
-                    "Poseidón no reescribió el estado.",
+                    "⚠️ The spec was already in status: implemented; "
+                    "Poseidon did not rewrite it.",
                     style="yellow",
                     markup=False,
                 )
@@ -218,34 +218,34 @@ class PhaseRunner:
             verdict = self._extract_strict_verdict(report_content, "odd")
             if verdict not in {"approved", "observed"}:
                 self.console.print(
-                    "✅ Observación ODD guardada", style="green", markup=False
+                    "✅ ODD observation saved", style="green", markup=False
                 )
                 return
             target_status = SpecStatus.OBSERVED
             report_field = None
-            success_message = "✅ Spec actualizado a status: observed"
+            success_message = "✅ Spec updated to status: observed"
         elif phase_kind == "drift":
             verdict = self._extract_strict_verdict(report_content, "drift")
             if verdict == "drifted":
                 self.console.print(
-                    "❌ Drift rechazado. El spec no puede ser certificado",
+                    "❌ Drift rejected. The spec cannot be certified",
                     style="red",
                     markup=False,
                 )
                 return
             if verdict not in {"no-drift", "drifted-accepted"}:
                 self.console.print(
-                    "⚠️ No se encontró un veredicto Drift certificable; el spec no cambió.",
+                    "⚠️ No certifiable Drift verdict was found; the spec was not changed.",
                     style="yellow",
                     markup=False,
                 )
                 return
             target_status = SpecStatus.CERTIFIED
             report_field = "drift_report"
-            success_message = "✅ Drift certificado. Spec actualizado a status: certified"
+            success_message = "✅ Drift certified. Spec updated to status: certified"
         else:
             raise InputValidationError(
-                f"Tipo de fase no soportado para actualizar metadatos: {phase_kind}"
+                f"Unsupported phase kind for metadata update: {phase_kind}"
             )
 
         try:
@@ -257,7 +257,7 @@ class PhaseRunner:
         except ArtifactSaveError:
             raise
         except Exception as exc:
-            raise ArtifactSaveError(f"No se pudo actualizar el spec: {exc}") from exc
+            raise ArtifactSaveError(f"Could not update the spec: {exc}") from exc
 
         self.console.print(success_message, style="green", markup=False)
 
@@ -328,7 +328,7 @@ class PhaseRunner:
         spec_name = self._spec_name(spec_path, context_path)
         if spec_name is None:
             self.console.print(
-                "⚠️ No se pudo determinar el nombre del spec; el artefacto no se guardó.",
+                "⚠️ Could not determine the spec name; the artifact was not saved.",
                 style="yellow",
             )
             return None
@@ -381,7 +381,7 @@ class PhaseRunner:
             entries = list(specs_dir.iterdir())
         except OSError as exc:
             raise ArtifactSaveError(
-                f"No se pudo inspeccionar el directorio de specs {specs_dir}: {exc}"
+                f"Could not inspect the specs directory {specs_dir}: {exc}"
             ) from exc
         numbers = [
             int(match.group(1))
@@ -404,7 +404,7 @@ class PhaseRunner:
             normalized = normalized[:-3]
         if not normalized or not _PHASE_PATTERN.fullmatch(normalized):
             raise InputValidationError(
-                "La fase solo puede contener letras, números, guiones y guiones bajos."
+                "A phase may contain only letters, numbers, hyphens, and underscores."
             )
         skills_dir = Path.cwd() / ".meta-skills"
         normalized_lower = normalized.lower()
@@ -426,7 +426,7 @@ class PhaseRunner:
                 )
             except OSError as exc:
                 raise InputValidationError(
-                    f"No se pudo leer el directorio de fases {skills_dir}: {exc}"
+                    f"Could not read the phases directory {skills_dir}: {exc}"
                 ) from exc
             starts_with = [
                 path
@@ -441,7 +441,7 @@ class PhaseRunner:
             if contains:
                 return contains[0]
         raise InputValidationError(
-            f"No se encontró la Memoria Fría para la fase '{phase}' en {skills_dir}"
+            f"Cold memory not found for phase '{phase}' in {skills_dir}"
         )
 
     @staticmethod
@@ -454,4 +454,4 @@ class PhaseRunner:
         try:
             return path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            raise InputValidationError(f"No se pudo leer {description} en {path}: {exc}") from exc
+            raise InputValidationError(f"Could not read {description} at {path}: {exc}") from exc

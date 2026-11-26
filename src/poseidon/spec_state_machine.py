@@ -1,4 +1,4 @@
-"""Máquina de estados de la especificación: frontmatter y transiciones."""
+"""Specification state machine: frontmatter and transitions."""
 
 from __future__ import annotations
 
@@ -25,14 +25,14 @@ from poseidon.types import (
 
 
 class SpecStateMachine:
-    """Gestiona el estado de los specs: lectura, escritura y transiciones válidas."""
+    """Manage spec state: reads, writes, and valid transitions."""
 
     def __init__(self, console=None):
         self.console = console
 
     def read_status(self, spec_path: Path) -> SpecStatus:
-        """Lee el status actual del spec desde su frontmatter."""
-        specification = self._read_file(spec_path, "el spec para leer su estado")
+        """Read the spec's current status from its frontmatter."""
+        specification = self._read_file(spec_path, "the spec to read its status")
         frontmatter = self._extract_frontmatter(specification)
         status_str = self._extract_status_from_frontmatter(frontmatter)
         try:
@@ -41,8 +41,8 @@ class SpecStateMachine:
             return SpecStatus.DRAFT
 
     def read_frontmatter_fields(self, spec_path: Path) -> dict[str, str]:
-        """Lee todos los campos del frontmatter del spec."""
-        specification = self._read_file(spec_path, "el spec para leer frontmatter")
+        """Read every field in the spec frontmatter."""
+        specification = self._read_file(spec_path, "the spec to read frontmatter")
         parts = _split_frontmatter(specification)
         if parts is None:
             return {}
@@ -54,15 +54,15 @@ class SpecStateMachine:
             return {}
 
     def validate_gate(self, spec_path: str | None, allowed_statuses: set[str]) -> SpecStatus:
-        """Valida que el spec tenga un estado permitido para el gate."""
+        """Validate that the spec has a status allowed by the gate."""
         if not spec_path or not Path(spec_path).is_file():
-            raise GateError("Spec no encontrado para validación de gate")
+            raise GateError("Spec not found for gate validation")
 
         current = self.read_status(Path(spec_path))
         if current.value not in allowed_statuses:
             raise GateError(
-                f"GATEKEEPER BLOQUEÓ LA FASE: El spec no ha pasado la auditoría "
-                f"Goldfish (status actual: {current.value}). Ejecuta la Fase 1b primero."
+                f"GATEKEEPER BLOCKED THE PHASE: the spec has not passed the "
+                f"Goldfish audit (current status: {current.value}). Run Phase 1b first."
             )
         return current
 
@@ -73,7 +73,7 @@ class SpecStateMachine:
         report_path: Path | None = None,
         report_field: str | None = None,
     ) -> None:
-        """Realiza una transición de estado atómica."""
+        """Perform an atomic state transition."""
         current = self.read_status(spec_path)
 
         allowed = _VALID_TRANSITIONS.get(current, set())
@@ -84,13 +84,13 @@ class SpecStateMachine:
         ):
             allowed_str = ", ".join(s.value for s in allowed)
             raise IllegalTransitionError(
-                f"Transición de estado no permitida: {current.value} -> {target_status.value}. "
-                f"Transiciones válidas desde {current.value}: {allowed_str}"
+                f"Illegal state transition: {current.value} -> {target_status.value}. "
+                f"Valid transitions from {current.value}: {allowed_str}"
             )
 
-        specification = self._read_file(spec_path, "el spec para actualizar")
+        specification = self._read_file(spec_path, "the spec to update")
         if _split_frontmatter(specification) is None:
-            raise InputValidationError("El spec no tiene frontmatter válido")
+            raise InputValidationError("The spec does not have valid frontmatter")
 
         if target_status == SpecStatus.AUDITED:
             updated = self._set_frontmatter_field(
@@ -109,7 +109,7 @@ class SpecStateMachine:
         self._atomic_write(spec_path, updated)
 
     def _atomic_write(self, path: Path, content: str) -> None:
-        """Escribe atómicamente: temp file + os.replace."""
+        """Write atomically: temp file + os.replace."""
         try:
             temp_path = path.with_suffix(path.suffix + ".tmp")
             temp_path.write_text(content, encoding="utf-8")
@@ -117,14 +117,14 @@ class SpecStateMachine:
         except OSError as exc:
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
-            raise ArtifactSaveError(f"No se pudo escribir atómicamente en {path}: {exc}") from exc
+            raise ArtifactSaveError(f"Could not write atomically to {path}: {exc}") from exc
 
     @staticmethod
     def _read_file(path: Path, description: str) -> str:
         try:
             return path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            raise InputValidationError(f"No se pudo leer {description} en {path}: {exc}") from exc
+            raise InputValidationError(f"Could not read {description} at {path}: {exc}") from exc
 
     @staticmethod
     def _extract_frontmatter(content: str) -> str:

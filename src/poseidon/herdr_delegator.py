@@ -294,7 +294,7 @@ class HerdrDelegator:
                 if existing:
                     self._debug_terminal(existing)
                     self.console.print(
-                        f"⏳ Reutilizando terminal {existing}.",
+                        f"⏳ Reusing terminal {existing}.",
                         style="cyan",
                         markup=False,
                     )
@@ -394,7 +394,7 @@ class HerdrDelegator:
     def _print_progress(self, address: str, text: str) -> None:
         last_line = self._last_meaningful_line(text)
         self.console.print(
-            f"⏳ {address} sigue trabajando: {last_line}",
+            f"⏳ {address} is still working: {last_line}",
             style="dim",
             markup=False,
         )
@@ -405,7 +405,7 @@ class HerdrDelegator:
             clean = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", line).strip()
             if clean and not clean.startswith("build ·"):
                 return clean
-        return "sin nueva salida"
+        return "no new output"
 
     def _read_owned_artifact(
         self, artifact_path: Path, wait_result: Mapping[str, Any] | None = None
@@ -777,11 +777,11 @@ class HerdrDelegator:
 
     def _print_wait_feedback(self, address: str) -> None:
         self.console.print(
-            f"⏳ Agente lanzado en terminal {address}. Esperando a que termine...",
+            f"⏳ Agent launched in terminal {address}. Waiting for it to finish...",
             style="cyan",
         )
         self.console.print(
-            "💡 Si el agente se queda pidiendo permisos, abre otra terminal y usa: "
+            "💡 If the agent waits for permissions, open another terminal and run: "
             f"hc attach {address}",
             style="yellow",
         )
