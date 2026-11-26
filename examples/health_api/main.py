@@ -7,3 +7,8 @@ existe para que la Fase 2 no invente la estructura del proyecto.
 from fastapi import FastAPI
 
 app = FastAPI(title="Fixture API")
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}

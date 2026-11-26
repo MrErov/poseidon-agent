@@ -31,6 +31,11 @@ Fixture mínimo de una API FastAPI ya existente en `examples/health_api/`. La hi
 - Ejecutar pytest con el intérprete del proyecto (`.venv\Scripts\python.exe -m pytest`), no con `uv run`.
 - La fecha actual del ejercicio es 2026-11-20.
 
+## Phase 4 code scope (approved by the Navigator on 2026-11-26)
+- `files=examples/health_api/main.py, tests/test_health_api.py`
+- Base for the diff: `bd885d8` (fixture skeleton, before the TDD implementation).
+- Only these two files are code in scope; the spec and its audit are inputs, not code.
+
 ## Last updated
 2026-11-26 (materialización del fixture para la Fase 2)
 
