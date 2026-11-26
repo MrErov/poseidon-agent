@@ -259,7 +259,7 @@ def test_cli_auto_detects_single_spec(tmp_path: Path, monkeypatch) -> None:
         result = cli.invoke(app, ["run", "--phase", "1b", "--model", "modelo"])
 
     assert result.exit_code == 0, result.output
-    assert "ℹ️ Auto-detectado spec: specs/US-002.spec.md" in result.output
+    assert "ℹ️ Auto-detected spec: specs/US-002.spec.md" in result.output
     prompt = completion.call_args.kwargs["messages"][1]["content"]
     assert "# US-002" in prompt
 

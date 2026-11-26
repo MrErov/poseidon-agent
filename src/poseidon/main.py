@@ -66,7 +66,7 @@ def _resolve_spec_default(spec: str | None, console: Console) -> str | None:
     if len(candidates) != 1:
         return None
     detected = _display_path(candidates[0])
-    console.print(f"ℹ️ Auto-detectado spec: {detected}", markup=False)
+    console.print(f"ℹ️ Auto-detected spec: {detected}", markup=False)
     return detected
 
 

@@ -1,3 +1,7 @@
+## [3.6.1] - 2026-11-26
+### Fixed
+- **English auto-detect message:** the smart-defaults notice now reads `ℹ️ Auto-detected spec: ...`, completing the CLI localization.
+
 ## [3.6.0] - 2026-11-26
 ### Added
 - **Interactive wizard:** `poseidon run` without arguments or with `-i` asks for phase, spec, and role.
