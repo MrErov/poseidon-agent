@@ -216,3 +216,24 @@ def test_cli_debug_flag_reaches_herdr_delegator(tmp_path: Path, monkeypatch) -> 
     from_settings.assert_called_once()
     assert from_settings.call_args.kwargs["debug"] is True
     completion.assert_not_called()
+
+
+def test_cli_resume_does_not_launch_new_execution(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "00-context-bootstrap.md").write_text(
+        "Map repository", encoding="utf-8"
+    )
+    herdr = Mock()
+    herdr.resume.return_value = "Final context map"
+
+    with patch("poseidon.main.HerdrDelegator.from_settings", return_value=herdr) as from_settings:
+        result = cli.invoke(
+            app, ["run", "--phase", "0", "--executor", "herdr", "--resume", "t19"]
+        )
+
+    assert result.exit_code == 0, result.output
+    from_settings.assert_called_once()
+    herdr.resume.assert_called_once_with("t19")
+    herdr.execute.assert_not_called()

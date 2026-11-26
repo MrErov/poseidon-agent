@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -151,9 +152,16 @@ def test_wait_timeout_has_recovery_hints() -> None:
         _wait_result(ended=False, reason="timeout", status="working"),
     )
 
-    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
-        with pytest.raises(DelegationError, match="timed out.*hc attach.*hc read.*hc kill"):
-            HerdrDelegator(launch="interactive").execute("prompt", "opencode")
+    with (
+        patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process),
+        patch("poseidon.herdr_delegator.time.monotonic", side_effect=[0.0, 0.0, 1.0]),
+    ):
+        with pytest.raises(DelegationError, match="Progress is not lost.*--resume t42"):
+            HerdrDelegator(
+                launch="interactive",
+                total_timeout_seconds=1e-9,
+                wait_timeout_seconds=0.001,
+            ).execute("prompt", "opencode")
 
     methods = [request["method"] for request in _requests(process)]
     assert methods == ["terminal.run", "terminal.send"]
@@ -367,18 +375,25 @@ def test_from_settings_uses_mode_and_900_second_default() -> None:
 def _headless_terminal_process(
     wait_result: dict | None = None,
     read_result: dict | None = None,
+    include_list: bool = False,
 ) -> Mock:
     wait_result = wait_result or _wait_result(
         ended=True, reason="exit", status=None, exit_code=0
     )
     read_result = read_result or _read_result("PONG")
-    return _process(
-        [
-            _rpc({"address": "t42"}, 1),
-            _rpc(wait_result, 2),
-            _rpc(read_result, 3),
+    lines = [
+        _rpc({"address": "t42"}, 1),
+        _rpc(wait_result, 2),
+        _rpc(read_result, 3),
+    ]
+    if include_list:
+        lines = [
+            _rpc({"terminals": []}, 1),
+            _rpc({"address": "t42"}, 2),
+            _rpc(wait_result, 3),
+            _rpc(read_result, 4),
         ]
-    )
+    return _process(lines)
 
 
 def _prompt_path(process: Mock) -> Path:
@@ -448,11 +463,20 @@ def test_prompt_file_is_deleted_on_wait_timeout(tmp_path: Path) -> None:
         _wait_result(ended=False, reason="timeout", status="working")
     )
 
-    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
-        with pytest.raises(DelegationError, match="timed out"):
-            HerdrDelegator().execute("prompt", "opencode")
+    with (
+        patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process),
+        patch("poseidon.herdr_delegator.time.monotonic", side_effect=[0.0, 0.0, 1.0]),
+    ):
+        with pytest.raises(DelegationError, match="did not finish|Progress is not lost"):
+            HerdrDelegator(total_timeout_seconds=1e-9).execute(
+                "prompt", "opencode"
+            )
 
-    assert not _prompt_path(process).exists()
+    retained = _prompt_path(process)
+    assert retained.exists()
+    delegator = HerdrDelegator()
+    delegator._cleanup_prompt_file(retained)
+    assert not retained.exists()
     monkeypatch.undo()
 
 
@@ -602,4 +626,224 @@ def test_auto_approve_can_be_disabled(tmp_path: Path) -> None:
 
     line = _requests(process)[0]["params"]["line"]
     assert "--auto" not in line
+    monkeypatch.undo()
+
+
+def _artifact_text(round_number: int = 1) -> str:
+    return (
+        "---\n"
+        "effective_verdict: audited\n"
+        "findings_blocking: 0\n"
+        "findings_warning: 0\n"
+        "findings_info: 0\n"
+        f"audit_round: {round_number}\n"
+        "---\n"
+        "Audit body\n"
+    )
+
+
+def test_owned_artifact_is_read_instead_of_raw_stdout(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    artifact = tmp_path / "specs" / "US-002.audit.2.md"
+    artifact.parent.mkdir()
+    artifact.write_text(_artifact_text(2), encoding="utf-8")
+    process = _headless_terminal_process(
+        read_result=_read_result("raw stdout"), include_list=True
+    )
+    delegator = HerdrDelegator()
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        result = delegator.execute(
+            "prompt", "opencode", phase_kind="goldfish", artifact_path=artifact
+        )
+
+    assert result == _artifact_text(2)
+    assert delegator.last_artifact_path == artifact
+    assert "raw stdout" not in result
+    assert delegator.audit_round == 2
+    monkeypatch.undo()
+
+
+def test_owned_artifact_falls_back_to_newest_coherent_round(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    expected = tmp_path / "specs" / "US-002.audit.2.md"
+    good = tmp_path / "specs" / "US-002.audit.1.md"
+    good.parent.mkdir()
+    good.write_text(_artifact_text(1), encoding="utf-8")
+    expected.write_text("raw transcript without frontmatter", encoding="utf-8")
+    process = _headless_terminal_process(
+        read_result=_read_result("raw stdout"), include_list=True
+    )
+    delegator = HerdrDelegator()
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        result = delegator.execute(
+            "prompt", "opencode", phase_kind="goldfish", artifact_path=expected
+        )
+
+    assert result == _artifact_text(1)
+    assert delegator.last_artifact_path == good
+    monkeypatch.undo()
+
+
+def test_missing_owned_artifact_is_explicit_error(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    expected = tmp_path / "specs" / "US-002.audit.2.md"
+    process = _headless_terminal_process(
+        read_result=_read_result("raw stdout"), include_list=True
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        with pytest.raises(DelegationError, match="did not write the expected report"):
+            HerdrDelegator().execute(
+                "prompt", "opencode", phase_kind="goldfish", artifact_path=expected
+            )
+
+    monkeypatch.undo()
+
+
+def test_owned_artifact_requires_effective_verdict(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    expected = tmp_path / "specs" / "US-002.audit.1.md"
+    expected.parent.mkdir()
+    expected.write_text("---\naudit_round: 1\n---\nbody\n", encoding="utf-8")
+    process = _headless_terminal_process(
+        read_result=_read_result("raw stdout"), include_list=True
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        with pytest.raises(DelegationError, match="did not write the expected report"):
+            HerdrDelegator().execute(
+                "prompt", "opencode", phase_kind="goldfish", artifact_path=expected
+            )
+
+    monkeypatch.undo()
+
+
+def test_timeout_wait_resumes_and_reports_progress(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _process(
+        [
+            _rpc({"address": "t42"}, 1),
+            _rpc(_wait_result(ended=False, reason="timeout"), 2),
+            _rpc(_read_result("→ Write specs/US-002.audit.1.md"), 3),
+            _rpc(_wait_result(ended=True, reason="exit", exit_code=0), 4),
+            _rpc(_read_result("PONG"), 5),
+        ]
+    )
+    delegator = HerdrDelegator(
+        total_timeout_seconds=60,
+        progress_interval_seconds=0.001,
+        wait_timeout_seconds=0.001,
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        assert delegator.execute("prompt", "opencode") == "PONG"
+
+    methods = [request["method"] for request in _requests(process)]
+    assert methods == [
+        "terminal.run",
+        "terminal.wait",
+        "terminal.read",
+        "terminal.wait",
+        "terminal.read",
+    ]
+    monkeypatch.undo()
+
+
+def test_resume_does_not_launch_or_send_prompt(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _process(
+        [
+            _rpc(_wait_result(ended=False, reason="timeout"), 1),
+            _rpc(_read_result("working"), 2),
+            _rpc(_wait_result(ended=True, reason="exit", exit_code=0), 3),
+            _rpc(_read_result("final output"), 4),
+        ]
+    )
+    delegator = HerdrDelegator(
+        total_timeout_seconds=60,
+        progress_interval_seconds=0.001,
+        wait_timeout_seconds=0.001,
+    )
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        assert delegator.resume("t19") == "final output"
+
+    methods = [request["method"] for request in _requests(process)]
+    assert "terminal.run" not in methods
+    assert "terminal.send" not in methods
+    monkeypatch.undo()
+
+
+def test_execute_reuses_live_matching_terminal(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    process = _process(
+        [
+            _rpc(
+                {
+                    "terminals": [
+                        {
+                            "address": "t19",
+                            "name": "poseidon-tester-goldfish-abc",
+                            "state": "live",
+                            "created_ms": 10,
+                        }
+                    ]
+                },
+                1,
+            ),
+            _rpc(_wait_result(ended=True, reason="exit", exit_code=0), 2),
+            _rpc(_read_result("reused output"), 3),
+        ]
+    )
+    delegator = HerdrDelegator(name_prefix="poseidon-tester")
+
+    with patch("poseidon.herdr_delegator.subprocess.Popen", return_value=process):
+        assert delegator.execute("prompt", "opencode", phase_kind="goldfish") == "reused output"
+
+    methods = [request["method"] for request in _requests(process)]
+    assert "terminal.run" not in methods
+    assert "terminal.send" not in methods
+    monkeypatch.undo()
+
+
+def test_prompt_cleanup_warns_after_retries(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    console = Mock()
+    delegator = HerdrDelegator(console=console)
+    path = tmp_path / "locked.prompt.md"
+    path.write_text("prompt", encoding="utf-8")
+
+    with (
+        patch("poseidon.herdr_delegator.time.sleep"),
+        patch.object(Path, "unlink", side_effect=OSError("locked")),
+    ):
+        delegator._cleanup_prompt_file(path)
+
+    messages = [call.args[0] for call in console.print.call_args_list]
+    assert any("Could not delete prompt file" in message for message in messages)
+    monkeypatch.undo()
+
+
+def test_stale_prompts_are_cleaned_on_startup(tmp_path: Path) -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.chdir(tmp_path)
+    directory = tmp_path / ".poseidon" / "tmp"
+    directory.mkdir(parents=True)
+    stale = directory / "stale.prompt.md"
+    stale.write_text("prompt", encoding="utf-8")
+    os.utime(stale, (time.time() - 7201, time.time() - 7201))
+
+    HerdrDelegator()
+
+    assert not stale.exists()
     monkeypatch.undo()

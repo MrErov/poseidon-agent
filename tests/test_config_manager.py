@@ -263,3 +263,43 @@ def test_auto_approve_must_be_boolean(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigValidationError, match="auto_approve"):
         ConfigManager(config).resolve("1b")
+
+
+def test_resumable_wait_defaults(tmp_path: Path) -> None:
+    result = ConfigManager(tmp_path / "missing.yaml").resolve("1b")
+
+    assert result.herdr["total_timeout_seconds"] == 3600.0
+    assert result.herdr["progress_interval_seconds"] == 30.0
+    assert result.herdr["phase_timeouts"] == {}
+
+
+def test_phase_timeout_values_are_preserved(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  phase_timeouts: {'0': 14400, '1a': 7200}\n")
+
+    result = ConfigManager(config).resolve("1b")
+
+    assert result.herdr["phase_timeouts"]["0"] == 14400
+    assert result.herdr["phase_timeouts"]["1a"] == 7200
+
+
+def test_phase_timeout_keys_must_be_strings(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  phase_timeouts: {0: 14400}\n")
+
+    with pytest.raises(ConfigValidationError, match="keys must be strings"):
+        ConfigManager(config).resolve("1b")
+
+
+def test_phase_timeout_must_be_positive(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    _write_config(config)
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("  phase_timeouts: {'0': 0}\n")
+
+    with pytest.raises(ConfigValidationError, match="greater than zero"):
+        ConfigManager(config).resolve("1b")

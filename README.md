@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.2-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.5.3-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-123%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-138%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -178,6 +178,9 @@ herdr:
   agent_model: ""  # optional; adds --model "<model>" when set
   agent_args: []   # extra CLI arguments appended to the agent command
   auto_approve: true  # adds --auto to OpenCode; set false for manual permission prompts
+  total_timeout_seconds: 3600  # total deadline; wait is a resumable check-in
+  progress_interval_seconds: 30  # poll progress every 30 seconds
+  phase_timeouts: {}  # optional per-phase deadlines, for example {'0': 14400}
 ```
 
 Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses one JSON-RPC 2.0 session per run over `hc connect`, with a stable caller identity and strict response validation.
@@ -188,18 +191,27 @@ Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses on
 
 **Debug logging:** add `--debug` to print the exact command sent to `hc connect`, JSON-RPC responses, the terminal ID, and the command to attach with `hc attach <id>`. Debug terminals remain alive for inspection; no `hc kill` or `hc rm` is issued by debug mode. Logs may include prompt and response content, so enable them only for local troubleshooting.
 
+**Artifact ownership:** Poseidon calculates the exact report path before launch, injects it into the prompt, reads that file afterward, validates its frontmatter, and updates the spec atomically. Agent stdout is never saved as the audit report; a coherent newer report can be used as a fallback.
+
 **Interactive (experimental):** the existing TUI flow uses `terminal.send(wait: true)` with the **real terminal address as caller**, falling back to `terminal.wait` with the same address. This requires an agent that reports status to Herdr. OpenCode's TUI may report no status and no turn, so an interactive agent that answers and remains open cannot be waited on reliably. Use `launch: headless_in_terminal` for deterministic completion.
 
 **Headless machine execution:** `herdr.mode: headless` still supports one-shot `machine.exec` calls with base64 stdin, capped at 600 seconds. OpenCode uses `opencode run --format json` with stdin (no `-` argument).
 
 
 ### Troubleshooting Herdr
+### Long phases and resumable waiting
+
+A `terminal.wait` timeout is only a check-in, not proof that the agent stopped. Poseidon resumes the wait until `herdr.total_timeout_seconds` (default 3600), polling `terminal.read` every `progress_interval_seconds` and showing the last meaningful output line. Per-phase deadlines can be set with `phase_timeouts`, for example `{"0": 14400, "1a": 7200}`.
+
+If the total deadline is reached, the terminal remains alive. Reattach to the same work with `poseidon run --phase 0 --role tester --resume t19`. A subsequent run automatically reuses a live matching terminal. `machine.exec` is capped at 600 seconds; long phases require `headless_in_terminal`.
+
+### Troubleshooting Herdr
 
 #### Environment prerequisites (B1)
 
-On Windows, the Python interpreter running Poseidon must have **Medium Mandatory Level** integrity. If you see `os error 5` when calling `hc connect`, check `icacls <project-path>` and `whoami /groups`: a project marked `Mandatory Label\\Low Mandatory Level` runs Python in Low IL and cannot open Herdr's Medium-IL named pipe. Use Python outside the Low-IL directory or, as an administrator, run `icacls "C:\path\to\project" /setintegritylevel (OI)(CI)M /T`.
+On Windows, the Python interpreter running Poseidon must have **Medium Mandatory Level** integrity. If you see `os error 5` when calling `hc connect`, check `icacls <project-path>` and `whoami /groups`: a project marked `Mandatory Label\\Low Mandatory Level` runs Python in Low IL and cannot open Herdr's Medium-IL named pipe. Use Python outside the Low-IL directory or run `icacls ".venv" "/setintegritylevel" "(OI)(CI)M" "/T"` (works without admin).
 
-The OpenCode model must exist in the catalog shown by `opencode models`. If it is missing, pass `herdr.agent_model` explicitly. An empty `agent_model` leaves model selection to OpenCode's default configuration, so an invalid default model can still fail.
+The OpenCode model must exist in the catalog shown by `opencode models`. The default `nvidia/nvidia/moonshotai/kimi-k3.1-pro` does not exist; use `nvidia/nvidia/nemotron-3-ultra-550b-a55b` or pass a valid `herdr.agent_model`. An empty `agent_model` leaves model selection to OpenCode's default configuration, so an invalid default model can still fail.
 
 #### Verified headless-in-terminal recipe
 
@@ -260,6 +272,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 ## Changelog Highlights
 
 - **v3.5.2** — OpenCode execution unblocking: RPC debug logs, `--debug`, model fallback, and non-interactive `--auto` handling.
+- **v3.5.3** — Artifact ownership, resumable waits, and atomic state transitions.
 - **v3.5.1** — Headless-in-terminal delegation: prompt files, real interactive caller, explicit model handling, and Windows UTF-8 safety.
 - **v3.5.0** — Herdr turn semantics: persistent JSON-RPC sessions, turn-aware waits, headless machine execution, and strict mode/config validation.
 - **v3.4.0** — Marketing Release: product-style READMEs, VHS demo script and Keel Nav protocol README.

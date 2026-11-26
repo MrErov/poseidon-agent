@@ -66,6 +66,9 @@ class ConfigManager:
         "agent_model": "",
         "agent_args": [],
         "auto_approve": True,
+        "total_timeout_seconds": 3600.0,
+        "progress_interval_seconds": 30.0,
+        "phase_timeouts": {},
     }
     _HERDR_TYPES = {
         "executable": str,
@@ -80,6 +83,9 @@ class ConfigManager:
         "agent_model": str,
         "agent_args": list,
         "auto_approve": bool,
+        "total_timeout_seconds": (int, float),
+        "progress_interval_seconds": (int, float),
+        "phase_timeouts": dict,
     }
 
     def __init__(self, config_path: str | Path | None = None) -> None:
@@ -252,6 +258,22 @@ class ConfigManager:
             raise ConfigValidationError(
                 "Herdr 'agent_args' must contain only strings"
             )
+
+        phase_timeouts = herdr.get("phase_timeouts")
+        if phase_timeouts is not None:
+            if not isinstance(phase_timeouts, dict):
+                raise ConfigValidationError(
+                    "Herdr 'phase_timeouts' must be a mapping"
+                )
+            for phase, timeout in phase_timeouts.items():
+                if not isinstance(phase, str):
+                    raise ConfigValidationError(
+                        "Herdr 'phase_timeouts' keys must be strings"
+                    )
+                if not isinstance(timeout, (int, float)) or timeout <= 0:
+                    raise ConfigValidationError(
+                        f"Herdr phase '{phase}' timeout must be greater than zero"
+                    )
 
         for key, expected_type in self._HERDR_TYPES.items():
             value = herdr.get(key)

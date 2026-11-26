@@ -105,6 +105,11 @@ class PhaseRunner:
         if phase_kind == "goldfish":
             self.console.print("Aislando Memoria para Goldfish", style="bold yellow")
 
+        artifact_path = (
+            self._artifact_path(phase_kind, spec_file, context_file)
+            if executor == "herdr"
+            else None
+        )
         messages = self.prompt_builder.build_messages(
             phase=phase,
             spec_path=spec_file,
@@ -112,15 +117,34 @@ class PhaseRunner:
             specification=specification,
             context=context,
             graph_context=graph_context,
+            artifact_path=artifact_path,
         )
 
         content = self.execution_engine.execute(
-            messages, executor, model_name, herdr_agent
+            messages,
+            executor,
+            model_name,
+            herdr_agent,
+            phase_kind=phase_kind,
+            artifact_path=artifact_path,
         )
 
         self.console.print(Markdown(content))
 
-        artifact_path = self._save_artifact(phase_kind, content, spec_file, context_file)
+        if executor == "herdr" and artifact_path is not None:
+            owned_path = self.execution_engine.herdr_delegator.last_artifact_path
+            if owned_path is None:
+                raise ArtifactSaveError(
+                    "Herdr did not produce a readable artifact for this phase."
+                )
+            artifact_path = owned_path
+            self.console.print(
+                f"✅ Guardado en {self._display_path(artifact_path)}",
+                style="green",
+                markup=False,
+            )
+        else:
+            artifact_path = self._save_artifact(phase_kind, content, spec_file, context_file)
         if phase_kind in {"goldfish", "odd", "drift"}:
             self._update_spec_metadata(spec_file, content, artifact_path, phase_kind)
 

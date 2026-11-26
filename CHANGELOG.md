@@ -1,7 +1,16 @@
-## [3.5.2] - 2026-11-24
+## [3.5.3] - 2026-11-24
 ### Fixed
-- **OpenCode non-interactive execution:** `headless_in_terminal` now appends `--auto` by default, auto-approving permissions not explicitly denied (dangerous). Set `auto_approve: false` to require manual permission prompts.
-- **Model fallback:** `agent_model` is used first, then the role's `model`, then the CLI `--model`, preventing empty-model fallback to invalid OpenCode defaults.
+- **Artifact ownership:** Poseidon calculates and injects exact report paths, reads the actual artifact instead of raw terminal output, validates frontmatter, and uses coherent newer reports as fallback.
+- **Atomic state ownership:** the agent cannot advance spec status; Poseidon reconciles audit status and updates `goldfish_audit`/`drift_report` atomically.
+- **Resumable waits:** `terminal.wait` timeouts now poll progress and retry until a total deadline, with per-phase overrides and resume instructions.
+- **Resume support:** `poseidon run --resume <terminal>` reattaches to live work, and subsequent runs reuse matching live terminals.
+- **Prompt cleanup:** Windows prompt-file deletion retries with backoff, warns on remaining locks, and sweeps stale files on startup and atexit.
+
+### Added
+- `herdr.total_timeout_seconds` (3600), `progress_interval_seconds` (30), and validated `phase_timeouts`.
+- Tests for owned artifacts, verdict metadata, atomic reconciliation, resumable waits, terminal reuse, resume CLI, and cleanup warnings.
+- README long-phase/resume guidance, integrity prerequisites, model catalog guidance, and 138-test badge.
+
 - **Debuggability:** `poseidon run --debug` prints exact Herdr commands, JSON-RPC responses, terminal IDs, and `hc attach <id>` instructions while leaving terminals alive for inspection.
 - **RPC diagnostics:** `_HerdrSession` logs outgoing requests and matching responses with optional prompt/response content warnings.
 

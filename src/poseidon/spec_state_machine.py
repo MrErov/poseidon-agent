@@ -77,7 +77,7 @@ class SpecStateMachine:
         current = self.read_status(spec_path)
 
         allowed = _VALID_TRANSITIONS.get(current, set())
-        if target_status not in allowed:
+        if target_status != SpecStatus.AUDITED and target_status not in allowed:
             allowed_str = ", ".join(s.value for s in allowed)
             raise IllegalTransitionError(
                 f"Transición de estado no permitida: {current.value} -> {target_status.value}. "
@@ -88,9 +88,14 @@ class SpecStateMachine:
         if _split_frontmatter(specification) is None:
             raise InputValidationError("El spec no tiene frontmatter válido")
 
-        updated = self._set_frontmatter_field(
-            specification, "status", target_status.value, only_if=current.value
-        )
+        if target_status == SpecStatus.AUDITED:
+            updated = self._set_frontmatter_field(
+                specification, "status", SpecStatus.AUDITED.value
+            )
+        else:
+            updated = self._set_frontmatter_field(
+                specification, "status", target_status.value, only_if=current.value
+            )
 
         if report_field is not None and report_path is not None:
             updated = self._set_frontmatter_field(

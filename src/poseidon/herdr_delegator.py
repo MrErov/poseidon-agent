@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+import atexit
 import base64
 import json
 import queue
+import re
 import subprocess
 import threading
+import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import yaml
 from rich.console import Console
 
 from poseidon.console import configure_utf8_output
 from poseidon.exceptions import DelegationError
+from poseidon.types import _split_frontmatter
 
 _EOF = object()
 
@@ -191,11 +196,16 @@ class HerdrDelegator:
         agent_args: list[str] | None = None,
         auto_approve: bool = True,
         debug: bool = False,
+        total_timeout_seconds: float = 3600.0,
+        progress_interval_seconds: float = 30.0,
+        phase_timeouts: Mapping[str, float] | None = None,
     ) -> None:
         if wait_timeout_seconds <= 0 or connection_timeout_seconds <= 0:
             raise ValueError("Herdr timeouts must be greater than zero")
         if read_lines < 0:
             raise ValueError("read_lines cannot be negative")
+        if total_timeout_seconds <= 0 or progress_interval_seconds <= 0:
+            raise ValueError("Total and progress timeouts must be greater than zero")
         if mode not in {"persistent", "headless"}:
             raise ValueError("Herdr mode must be 'persistent' or 'headless'")
         if launch not in {"interactive", "headless_in_terminal"}:
@@ -218,6 +228,16 @@ class HerdrDelegator:
         self.agent_args = list(agent_args or [])
         self.auto_approve = auto_approve
         self.debug = debug
+        self.total_timeout_seconds = float(total_timeout_seconds)
+        self.progress_interval_seconds = float(progress_interval_seconds)
+        self.phase_timeouts = dict(phase_timeouts or {})
+        self._cleanup_stale_prompts()
+        atexit.register(self._cleanup_stale_prompts)
+        self.last_artifact_path: Path | None = None
+        self.last_findings: dict[str, Any] = {}
+        self.audit_round: int | None = None
+        self.phase_kind: str | None = None
+        self.role: str | None = None
         self._request_id = 0
 
     @classmethod
@@ -244,9 +264,18 @@ class HerdrDelegator:
             agent_args=list(values.get("agent_args", [])),
             auto_approve=bool(values.get("auto_approve", True)),
             debug=debug,
+            total_timeout_seconds=float(values.get("total_timeout_seconds", 3600)),
+            progress_interval_seconds=float(values.get("progress_interval_seconds", 30)),
+            phase_timeouts=dict(values.get("phase_timeouts", {}) or {}),
         )
 
-    def execute(self, prompt: str, cli_type: str) -> str:
+    def execute(
+        self,
+        prompt: str,
+        cli_type: str,
+        phase_kind: str | None = None,
+        artifact_path: Path | None = None,
+    ) -> str:
         """Execute one prompt using a single JSON-RPC connection."""
         normalized_cli = cli_type.strip().lower()
         if normalized_cli not in self._AGENTS:
@@ -257,12 +286,28 @@ class HerdrDelegator:
         if not prompt.strip():
             raise DelegationError("Cannot send an empty prompt to Herdr.")
 
+        self.phase_kind = phase_kind
+        self.last_artifact_path = None
         with _HerdrSession(self) as session:
+            if phase_kind:
+                existing = self._find_live_terminal(session)
+                if existing:
+                    self._debug_terminal(existing)
+                    self.console.print(
+                        f"⏳ Reutilizando terminal {existing}.",
+                        style="cyan",
+                        markup=False,
+                    )
+                    return self._finish_from_existing_terminal(
+                        session, existing, artifact_path
+                    )
             if self.mode == "headless":
-                return self._execute_headless(session, prompt, normalized_cli)
+                return self._execute_headless(session, prompt, normalized_cli, artifact_path)
             if self.launch == "headless_in_terminal":
-                return self._execute_headless_terminal(session, prompt, normalized_cli)
-            return self._execute_persistent(session, prompt, normalized_cli)
+                return self._execute_headless_terminal(
+                    session, prompt, normalized_cli, artifact_path
+                )
+            return self._execute_persistent(session, prompt, normalized_cli, artifact_path)
 
     def _debug_log(self, direction: str, payload: str) -> None:
         if self.debug:
@@ -282,8 +327,244 @@ class HerdrDelegator:
                 markup=False,
             )
 
+    def _wait_for_turn(
+        self,
+        session: _HerdrSession,
+        address: str,
+        initial_wait_result: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any]:
+        deadline = time.monotonic() + self._total_timeout_for_phase()
+        next_progress = time.monotonic()
+        wait_result = initial_wait_result
+        while True:
+            if wait_result is None:
+                wait_result = session.call(
+                    "terminal.wait",
+                    {
+                        "caller": address,
+                        "terminal": address,
+                        "timeout": self.wait_timeout_seconds,
+                    },
+                )
+            if wait_result.get("reason") != "timeout":
+                return wait_result
+            now = time.monotonic()
+            if now >= deadline:
+                raise DelegationError(self._resume_message(address, deadline))
+            if now >= next_progress:
+                try:
+                    progress = session.call(
+                        "terminal.read", {"terminal": address, "lines": 5}
+                    )
+                    self._print_progress(address, progress.get("text", ""))
+                except DelegationError:
+                    pass
+                next_progress = now + self.progress_interval_seconds
+            wait_result = session.call(
+                "terminal.wait",
+                {
+                    "caller": address,
+                    "terminal": address,
+                    "timeout": self.wait_timeout_seconds,
+                },
+            )
+
+    def _total_timeout_for_phase(self) -> float:
+        aliases = {
+            "context": "0", "spec": "1a", "goldfish": "1b",
+            "tdd": "2", "odd": "3", "drift": "4",
+        }
+        phase = self.phase_kind
+        if phase in self.phase_timeouts:
+            return float(self.phase_timeouts[phase])
+        alias = aliases.get(phase or "", phase)
+        return float(self.phase_timeouts.get(alias, self.total_timeout_seconds))
+
+    def _resume_message(self, address: str, deadline: float) -> str:
+        phase = self.phase_kind or "<phase>"
+        command = f"poseidon run --phase {phase}"
+        if self.role:
+            command += f" --role {self.role}"
+        command += f" --resume {address}"
+        return (
+            f"Herdr turn did not finish before {deadline:.0f}s. "
+            f"Progress is not lost: resume with '{command}'."
+        )
+
+    def _print_progress(self, address: str, text: str) -> None:
+        last_line = self._last_meaningful_line(text)
+        self.console.print(
+            f"⏳ {address} sigue trabajando: {last_line}",
+            style="dim",
+            markup=False,
+        )
+
+    @staticmethod
+    def _last_meaningful_line(text: str) -> str:
+        for line in reversed(text.splitlines()):
+            clean = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", line).strip()
+            if clean and not clean.startswith("build ·"):
+                return clean
+        return "sin nueva salida"
+
+    def _read_owned_artifact(
+        self, artifact_path: Path, wait_result: Mapping[str, Any] | None = None
+    ) -> str:
+        expected = Path(artifact_path)
+        candidates = [expected, *self._find_artifact_candidates(expected)]
+        for path in candidates:
+            try:
+                content = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            try:
+                self._validate_artifact_content(path, content)
+            except DelegationError:
+                continue
+            self.last_artifact_path = path
+            return content
+        raise DelegationError(
+            f"The agent did not write the expected report at {expected}."
+        )
+
+    def _find_artifact_candidates(self, expected: Path) -> list[Path]:
+        name = expected.name
+        if ".audit." in name:
+            prefix = name.split(".audit.", 1)[0] + ".audit."
+        elif ".drift." in name:
+            prefix = name.split(".drift.", 1)[0] + ".drift."
+        elif ".observation." in name:
+            prefix = name.split(".observation.", 1)[0] + ".observation."
+        elif ".spec." in name:
+            prefix = name.split(".spec.", 1)[0] + ".spec."
+        else:
+            prefix = name
+        candidates = [
+            path
+            for path in expected.parent.glob(f"{prefix}*.md")
+            if path.is_file() and path != expected
+        ]
+        return sorted(
+            candidates,
+            key=lambda path: (self._round_for_path(path), path.stat().st_mtime),
+            reverse=True,
+        )
+
+    @staticmethod
+    def _round_for_path(path: Path) -> int:
+        match = re.search(r"\.(?:audit|drift)\.(\d+)\.md$", path.name)
+        return int(match.group(1)) if match else -1
+
+    def _validate_artifact_content(self, path: Path, content: str) -> None:
+        parts = _split_frontmatter(content)
+        if parts is None:
+            raise DelegationError(f"Artifact {path} has no frontmatter.")
+        try:
+            metadata = yaml.safe_load(parts[1]) or {}
+        except yaml.YAMLError as exc:
+            raise DelegationError(f"Invalid YAML in {path}: {exc}") from exc
+        if not isinstance(metadata, dict):
+            raise DelegationError(f"Artifact {path} has invalid metadata.")
+        if self.phase_kind in {"goldfish", "drift"}:
+            verdict = metadata.get("effective_verdict")
+            if not isinstance(verdict, str) or not verdict.strip():
+                raise DelegationError(
+                    f"Artifact {path} is missing frontmatter effective_verdict."
+                )
+            if self.phase_kind == "goldfish":
+                expected_round = self._round_for_path(path)
+                if metadata.get("audit_round") != expected_round:
+                    raise DelegationError(
+                        f"Artifact {path} has incoherent audit_round."
+                    )
+                self.audit_round = expected_round
+            self.last_findings = {
+                key: metadata.get(key)
+                for key in ("findings_blocking", "findings_warning", "findings_info")
+            }
+
+    def resume(self, terminal: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,32}", terminal):
+            raise DelegationError(f"Invalid Herdr terminal id: {terminal}")
+        self.last_artifact_path = None
+        with _HerdrSession(self) as session:
+            return self._finish_from_existing_terminal(session, terminal, None)
+
+    def _find_live_terminal(self, session: _HerdrSession) -> str | None:
+        result = session.call("terminal.list", {})
+        terminals = result.get("terminals", [])
+        if not isinstance(terminals, list):
+            return None
+        prefix = self.name_prefix[:15]
+        candidates = [
+            item
+            for item in terminals
+            if isinstance(item, dict)
+            and item.get("state") == "live"
+            and str(item.get("name", "")).startswith(prefix)
+        ]
+        if not candidates:
+            return None
+        best = max(candidates, key=lambda item: item.get("created_ms", 0) or 0)
+        return best.get("address")
+
+    def _finish_from_existing_terminal(
+        self,
+        session: _HerdrSession,
+        address: str,
+        artifact_path: Path | None,
+    ) -> str:
+        wait_result = self._wait_for_turn(session, address)
+        self._print_wait_result(wait_result)
+        self._cleanup_prompt_for_terminal(session, address)
+        self._validate_wait_result(address, wait_result)
+        read_result = session.call(
+            "terminal.read",
+            {"caller": address, "terminal": address, "lines": self.read_lines},
+        )
+        self._validate_read_result(address, read_result)
+        if artifact_path is not None:
+            return self._read_owned_artifact(artifact_path, wait_result)
+        output = read_result["text"]
+        if not output.strip():
+            raise DelegationError(f"Herdr terminal {address} returned empty output.")
+        return output
+
+    def _cleanup_prompt_file(self, path: Path) -> None:
+        last_error: OSError | None = None
+        for _ in range(5):
+            try:
+                path.unlink(missing_ok=True)
+                return
+            except OSError as exc:
+                last_error = exc
+                time.sleep(1.0)
+        if last_error is not None:
+            self.console.print(
+                f"⚠️ Could not delete prompt file {path}; "
+                f"it will be retried on next startup: {last_error}",
+                style="yellow",
+                markup=False,
+            )
+
+    def _cleanup_stale_prompts(self) -> None:
+        directory = Path.cwd() / ".poseidon" / "tmp"
+        if not directory.is_dir():
+            return
+        now = time.time()
+        for path in directory.glob("*.prompt.md"):
+            try:
+                if now - path.stat().st_mtime > 7200:
+                    self._cleanup_prompt_file(path)
+            except OSError:
+                self._cleanup_prompt_file(path)
+
     def _execute_persistent(
-        self, session: _HerdrSession, prompt: str, cli_type: str
+        self,
+        session: _HerdrSession,
+        prompt: str,
+        cli_type: str,
+        artifact_path: Path | None = None,
     ) -> str:
         terminal_name = f"{self.name_prefix}-{uuid.uuid4().hex[:16]}"
         run_result = session.call(
@@ -315,16 +596,9 @@ class HerdrDelegator:
                     "timeout": self.wait_timeout_seconds,
                 },
             )
-            wait_result = send_result.get("wait")
-            if wait_result is None:
-                wait_result = session.call(
-                    "terminal.wait",
-                    {
-                        "caller": address,
-                        "terminal": address,
-                        "timeout": self.wait_timeout_seconds,
-                    },
-                )
+            wait_result = self._wait_for_turn(
+                session, address, send_result.get("wait")
+            )
             self._print_wait_result(wait_result)
             self._validate_wait_result(address, wait_result)
 
@@ -337,6 +611,8 @@ class HerdrDelegator:
                 },
             )
             self._validate_read_result(address, read_result)
+            if artifact_path is not None:
+                return self._read_owned_artifact(artifact_path, wait_result)
             output = read_result["text"]
             if not output.strip():
                 raise DelegationError(f"Herdr terminal {address} returned empty output.")
@@ -348,17 +624,22 @@ class HerdrDelegator:
             ) from exc
 
     def _execute_headless_terminal(
-        self, session: _HerdrSession, prompt: str, cli_type: str
+        self,
+        session: _HerdrSession,
+        prompt: str,
+        cli_type: str,
+        artifact_path: Path | None = None,
     ) -> str:
         prompt_path = self._write_prompt_file(prompt)
         address = "unknown"
+        preserve_prompt = False
         try:
             self._debug_log("→", self._headless_command_line(prompt_path, cli_type))
             run_result = session.call(
                 "terminal.run",
                 {
                     "line": self._headless_command_line(prompt_path, cli_type),
-                    "name": f"{self.name_prefix}-{uuid.uuid4().hex[:16]}",
+                    "name": f"{self.name_prefix[:15]}-{prompt_path.stem[:15]}",
                     "cwd": str(Path.cwd()),
                     "wait": False,
                     "no_parent": True,
@@ -372,10 +653,7 @@ class HerdrDelegator:
 
             self._debug_terminal(address)
             self._print_wait_feedback(address)
-            wait_result = session.call(
-                "terminal.wait",
-                {"terminal": address, "timeout": self.wait_timeout_seconds},
-            )
+            wait_result = self._wait_for_turn(session, address)
             self._print_wait_result(wait_result)
             self._validate_wait_result(address, wait_result)
             reason = str(wait_result.get("reason", "unknown")).lower()
@@ -393,20 +671,44 @@ class HerdrDelegator:
                 },
             )
             self._validate_read_result(address, read_result)
+            if artifact_path is not None:
+                return self._read_owned_artifact(artifact_path, wait_result)
             output = read_result["text"]
             if not output.strip():
                 raise DelegationError(f"Herdr terminal {address} returned empty output.")
             return output
         except DelegationError as exc:
+            if "Progress is not lost" in str(exc):
+                preserve_prompt = True
+                self.console.print(
+                    f"Prompt retained for resume: {prompt_path}",
+                    style="yellow",
+                    markup=False,
+                )
             raise DelegationError(
                 f"{exc} Terminal {address} remains available; "
                 "inspect it with `hc attach`."
             ) from exc
         finally:
-            try:
-                prompt_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+            if not preserve_prompt:
+                self._cleanup_prompt_file(prompt_path)
+
+    def _cleanup_prompt_for_terminal(
+        self, session: _HerdrSession, address: str
+    ) -> None:
+        directory = Path.cwd() / ".poseidon" / "tmp"
+        paths = list(directory.glob("*.prompt.md"))
+        if not paths:
+            return
+        try:
+            details = session.call("terminal.get", {"terminal": address})
+        except DelegationError:
+            return
+        name = str(details.get("name", ""))
+        directory = Path.cwd() / ".poseidon" / "tmp"
+        for path in directory.glob("*.prompt.md"):
+            if path.stem in name:
+                self._cleanup_prompt_file(path)
 
     def _write_prompt_file(self, prompt: str) -> Path:
         directory = Path.cwd() / ".poseidon" / "tmp"
@@ -434,7 +736,11 @@ class HerdrDelegator:
         return f"{command} < {subprocess.list2cmdline([str(prompt_path)])}"
 
     def _execute_headless(
-        self, session: _HerdrSession, prompt: str, cli_type: str
+        self,
+        session: _HerdrSession,
+        prompt: str,
+        cli_type: str,
+        artifact_path: Path | None = None,
     ) -> str:
         argv_by_agent = {
             "claude-code": ["claude", "-p", "--output-format", "text"],

@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.markup import escape
 
 from poseidon.config_manager import ConfigError, ConfigManager
@@ -83,6 +84,13 @@ def run_phase(
             help="Enable JSON-RPC and terminal debug output.",
         ),
     ] = False,
+    resume: Annotated[
+        str | None,
+        typer.Option(
+            "--resume",
+            help="Resume an existing Herdr terminal (for example, t19).",
+        ),
+    ] = None,
 ) -> None:
     """Ejecuta una fase mediante LiteLLM o un CLI local."""
     _configure_utf8_output()
@@ -115,6 +123,15 @@ def run_phase(
             else None
         )
         runner = PhaseRunner(herdr_delegator=herdr_delegator)
+        if resume is not None:
+            if executor != "herdr":
+                error_console.print(
+                    "[bold red]Error:[/bold red] [red]--resume requires --executor herdr.[/red]"
+                )
+                raise typer.Exit(code=1)
+            content = herdr_delegator.resume(resume)
+            runner.console.print(Markdown(content))
+            return
         runner.run(
             phase=phase,
             spec_path=spec,

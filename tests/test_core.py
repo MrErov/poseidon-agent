@@ -709,3 +709,43 @@ def test_herdr_executor_uses_persistent_delegator(
     assert "Contenido de prueba" in herdr.execute.call_args.args[0]
     local_execute.assert_not_called()
     completion.assert_not_called()
+
+
+def test_herdr_reconciles_agent_edited_spec_with_owned_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, spec_file = _write_inputs(tmp_path, spec_name="specs/US-001.spec.md")
+    spec_file.write_text(
+        "---\n"
+        "us_id: US-001\n"
+        "status: audited\n"
+        "goldfish_audit: specs/US-001.audit.99.md\n"
+        "---\n"
+        "# US-001\n",
+        encoding="utf-8",
+    )
+    report = tmp_path / "specs" / "US-001.audit.1.md"
+    report.write_text(
+        "---\n"
+        "effective_verdict: audited\n"
+        "audit_round: 1\n"
+        "---\n"
+        "Audit body\n",
+        encoding="utf-8",
+    )
+    herdr = Mock()
+    herdr.execute.return_value = report.read_text(encoding="utf-8")
+    herdr.last_artifact_path = report
+    monkeypatch.chdir(tmp_path)
+    output = StringIO()
+    runner = PhaseRunner(herdr_delegator=herdr, console=_console(output))
+
+    runner.run("1b", str(spec_file), "modelo", executor="herdr")
+
+    updated = spec_file.read_text(encoding="utf-8")
+    assert "status: audited" in updated
+    assert "goldfish_audit: specs/US-001.audit.1.md" in updated
+    assert "goldfish_audit: specs/US-001.audit.99.md" not in updated
+    assert herdr.execute.call_args.kwargs["artifact_path"].name == "US-001.audit.2.md"
+    assert len(list(report.parent.glob("US-001.audit.*.md"))) == 1
+    assert "Do not change 'status'" in herdr.execute.call_args.args[0]

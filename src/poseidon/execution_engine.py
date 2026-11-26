@@ -33,6 +33,8 @@ class ExecutionEngine:
         executor: str,
         model_name: str | None = None,
         herdr_agent: str | None = None,
+        phase_kind: str | None = None,
+        artifact_path: Any = None,
     ) -> str:
         """Ejecuta el prompt y retorna el contenido de la respuesta."""
         executor = executor.strip().lower()
@@ -47,7 +49,14 @@ class ExecutionEngine:
             return self._execute_api(messages, model_name)
         else:
             prompt = PromptBuilder.format_for_cli(messages)
-            return self._execute_delegator(prompt, executor, herdr_agent, model_name)
+            return self._execute_delegator(
+                prompt,
+                executor,
+                herdr_agent,
+                model_name,
+                phase_kind=phase_kind,
+                artifact_path=artifact_path,
+            )
 
     def _execute_api(self, messages: list[dict[str, str]], model_name: str) -> str:
         try:
@@ -69,10 +78,17 @@ class ExecutionEngine:
         executor: str,
         herdr_agent: str | None,
         model_name: str | None = None,
+        phase_kind: str | None = None,
+        artifact_path: Any = None,
     ) -> str:
         try:
             if executor == "herdr":
-                return self.herdr_delegator.execute(prompt, herdr_agent or "claude-code")
+                return self.herdr_delegator.execute(
+                    prompt,
+                    herdr_agent or "claude-code",
+                    phase_kind=phase_kind,
+                    artifact_path=artifact_path,
+                )
             else:
                 return self.delegator.execute(prompt, executor, model=model_name)
         except DelegationError as exc:
