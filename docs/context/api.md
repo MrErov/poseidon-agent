@@ -1,7 +1,7 @@
 # CONTEXT: api
 
 ## Purpose
-Fixture de una API FastAPI ya existente. La historia añade un endpoint de salud sin crear un servicio, framework o datastore nuevos.
+Fixture mínimo de una API FastAPI ya existente en `examples/health_api/`. La historia añade un endpoint de salud sin crear un servicio, framework o datastore nuevos.
 
 ## Responsibilities
 - Exponer respuestas HTTP JSON para consumidores externos.
@@ -9,27 +9,30 @@ Fixture de una API FastAPI ya existente. La historia añade un endpoint de salud
 - Mantener las métricas de CPU fuera del alcance de US-002.
 
 ## Public interface
+- Aplicación FastAPI: `examples.health_api.main:app` (esqueleto sin rutas todavía).
 - API HTTP JSON existente; `GET /health` es la interfaz nueva solicitada por US-002.
 - La respuesta esperada debe indicar el estado del servidor en JSON.
 
 ## Dependencies
 - Internal: N/A
-- External: FastAPI existente y Kubernetes como consumidor del endpoint.
+- External: FastAPI (extra `dev`), cliente de pruebas `httpx` y Kubernetes como consumidor del endpoint.
 
 ## Persistence / State
 - N/A — no hay persistencia ni emisiones para esta historia.
 
 ## Commands
-- Build: `N/A — fixture documental`
-- Test: `N/A — fixture documental`
-- Run: `N/A — fixture documental`
+- Build: `N/A — el fixture se instala con el proyecto`
+- Test: `.venv\Scripts\python.exe -m pytest tests/test_health_api.py`
+- Run: N/A — el contrato se ejerce en proceso con fastapi.testclient.TestClient.
 
 ## Gotchas / Observed tech debt
 - `GET /health` todavía no está implementado en este escenario.
+- Rutas aprobadas por el Navigator (2026-11-26): app en `examples/health_api/main.py` y tests en `tests/test_health_api.py`. No crear otro proyecto, venv ni pyproject.
+- Ejecutar pytest con el intérprete del proyecto (`.venv\Scripts\python.exe -m pytest`), no con `uv run`.
 - La fecha actual del ejercicio es 2026-11-20.
 
 ## Last updated
-2026-11-20 (skill 0.1.0)
+2026-11-26 (materialización del fixture para la Fase 2)
 
 ---
 
