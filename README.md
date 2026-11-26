@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.7.0-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.7.1-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -309,7 +309,8 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
-- **v3.7.0** — Responsive TUI, theme tokens, live spinner, and PyInstaller builds.
+- **v3.7.1** - Frozen binary support, cooperative cancellation, Herdr terminal cleanup, PyInstaller hardening.
+- **v3.7.0** - Responsive TUI, theme tokens, live spinner, and PyInstaller builds.
 - **v3.6.1** — Fully English auto-detect notice.
 - **v3.6.0** — Interactive wizard, smart defaults, and `poseidon status`.
 - **v3.5.7** — English CLI/TUI messages and strict US-002 re-audit.

@@ -16,6 +16,7 @@ from poseidon.console import configure_utf8_output
 from poseidon.core import GateError, PhaseRunner, PoseidonError
 from poseidon.herdr_delegator import HerdrDelegator
 from poseidon.spec_state_machine import SpecStateMachine
+from poseidon.utils import get_working_dir
 from poseidon.version import get_version
 
 app = typer.Typer(
@@ -61,7 +62,7 @@ def _version_callback(value: bool) -> None:
 
 def _discover_specs() -> list[Path]:
     """Return every ``*.spec.md`` file in the local specs directory."""
-    specs_dir = Path.cwd() / "specs"
+    specs_dir = get_working_dir() / "specs"
     if not specs_dir.is_dir():
         return []
     return sorted(specs_dir.glob("*.spec.md"), key=lambda path: path.name.lower())
@@ -315,7 +316,7 @@ def status_command() -> None:
 
     table.add_row("Default role", default_role, "used when --role is omitted")
 
-    skills_dir = Path.cwd() / ".meta-skills"
+    skills_dir = get_working_dir() / ".meta-skills"
     for phase_id, label, skill_file in _PHASES:
         skill_exists = (skills_dir / skill_file).is_file()
         table.add_row(

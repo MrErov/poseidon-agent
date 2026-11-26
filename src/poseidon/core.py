@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 import litellm  # noqa: F401 - re-exported for backward compatibility with tests
@@ -31,6 +32,7 @@ from poseidon.types import (
     SpecStatus,
     _split_frontmatter,
 )
+from poseidon.utils import get_working_dir
 
 
 class PhaseRunner:
@@ -59,8 +61,13 @@ class PhaseRunner:
         context_path: str | None = None,
         executor: str = "api",
         herdr_agent: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
-        """Validate and run a phase, saving its artifact when applicable."""
+        """Validate and run a phase, saving its artifact when applicable.
+
+        Args:
+            cancel_event: Optional threading.Event to signal cooperative cancellation.
+        """
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
             raise InputValidationError(f"Unsupported executor: '{executor}'.")
@@ -68,6 +75,8 @@ class PhaseRunner:
             raise InputValidationError(
                 "The --model parameter is required when executor='api'."
             )
+        if cancel_event is not None and cancel_event.is_set():
+            raise InputValidationError("Execution cancelled before start.")
 
         phase_file = self._resolve_phase_file(phase)
         phase_kind = self._phase_kind(phase, phase_file)
@@ -129,6 +138,7 @@ class PhaseRunner:
             herdr_agent,
             phase_kind=phase_kind,
             artifact_path=artifact_path,
+            cancel_event=cancel_event,
         )
 
         self.console.print(Markdown(content))
@@ -333,7 +343,7 @@ class PhaseRunner:
             )
             return None
 
-        specs_dir = Path.cwd() / "specs"
+        specs_dir = get_working_dir() / "specs"
         if phase_kind == "spec":
             return specs_dir / f"{spec_name}.spec.md"
         if phase_kind == "goldfish":
@@ -406,7 +416,7 @@ class PhaseRunner:
             raise InputValidationError(
                 "A phase may contain only letters, numbers, hyphens, and underscores."
             )
-        skills_dir = Path.cwd() / ".meta-skills"
+        skills_dir = get_working_dir() / ".meta-skills"
         normalized_lower = normalized.lower()
         alias = _PHASE_ALIASES.get(normalized_lower)
         if alias is not None:

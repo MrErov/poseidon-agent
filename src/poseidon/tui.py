@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from collections.abc import Callable
 from concurrent.futures import CancelledError
 from typing import Any
@@ -207,6 +208,7 @@ class PoseidonApp(App[None]):
         self._phase_running = False
         self._current_worker = None
         self._selected_phase = "0"
+        self._cancel_event: threading.Event | None = None
 
     @property
     def selected_phase(self) -> str:
@@ -332,6 +334,7 @@ class PoseidonApp(App[None]):
         context_path = self.query_one("#context-input", Input).value.strip() or None
 
         self._phase_running = True
+        self._cancel_event = threading.Event()
         self.sub_title = f"Running {phase}..."
         self.output_text = ""
         self.query_one(RichLog).clear()
@@ -345,6 +348,16 @@ class PoseidonApp(App[None]):
     def action_cancel_phase(self) -> None:
         """Cancel the currently running phase."""
         if self._phase_running and self._current_worker is not None:
+            # Signal cooperative cancellation
+            if self._cancel_event is not None:
+                self._cancel_event.set()
+            # If using Herdr, also kill the terminal
+            herdr = getattr(self, "_last_herdr", None)
+            if herdr is not None and herdr.last_terminal_address:
+                try:
+                    herdr.kill_terminal(herdr.last_terminal_address)
+                except Exception:
+                    pass  # Best effort
             self._current_worker.cancel()
             self.post_message(self.StreamText("\nCancelled by user\n"))
             self.post_message(self.PhaseComplete("Cancelled"))
@@ -364,6 +377,8 @@ class PoseidonApp(App[None]):
                 herdr = HerdrDelegator.from_settings(execution.herdr)
                 # Override console so Herdr logs go through our adapter
                 herdr.console = console
+                # Store for potential kill on cancellation
+                self._last_herdr = herdr
 
             runner = self._make_runner(console, herdr)
             runner.run(
@@ -373,6 +388,7 @@ class PoseidonApp(App[None]):
                 context_path=context_path,
                 executor=execution.executor,
                 herdr_agent=execution.agent,
+                cancel_event=self._cancel_event,
             )
             # NOTE: PhaseRunner already prints the result via console.print(Markdown(content))
             # so we don't re-post it here to avoid duplication

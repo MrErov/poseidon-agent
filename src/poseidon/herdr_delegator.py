@@ -21,6 +21,7 @@ from rich.console import Console
 from poseidon.console import configure_utf8_output
 from poseidon.exceptions import DelegationError
 from poseidon.types import _split_frontmatter
+from poseidon.utils import get_working_dir
 
 _EOF = object()
 
@@ -239,6 +240,7 @@ class HerdrDelegator:
         self.phase_kind: str | None = None
         self.role: str | None = None
         self._request_id = 0
+        self.last_terminal_address: str | None = None
 
     @classmethod
     def from_settings(
@@ -275,8 +277,13 @@ class HerdrDelegator:
         cli_type: str,
         phase_kind: str | None = None,
         artifact_path: Path | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
-        """Execute one prompt using a single JSON-RPC connection."""
+        """Execute one prompt using a single JSON-RPC connection.
+
+        Args:
+            cancel_event: Optional threading.Event to signal cooperative cancellation.
+        """
         normalized_cli = cli_type.strip().lower()
         if normalized_cli not in self._AGENTS:
             supported = ", ".join(sorted(self._AGENTS))
@@ -285,6 +292,8 @@ class HerdrDelegator:
             )
         if not prompt.strip():
             raise DelegationError("Cannot send an empty prompt to Herdr.")
+        if cancel_event is not None and cancel_event.is_set():
+            raise DelegationError("Execution cancelled.")
 
         self.phase_kind = phase_kind
         self.last_artifact_path = None
@@ -299,15 +308,41 @@ class HerdrDelegator:
                         markup=False,
                     )
                     return self._finish_from_existing_terminal(
-                        session, existing, artifact_path
+                        session, existing, artifact_path, cancel_event
                     )
             if self.mode == "headless":
-                return self._execute_headless(session, prompt, normalized_cli, artifact_path)
+                return self._execute_headless(
+                    session, prompt, normalized_cli, artifact_path, cancel_event
+                )
             if self.launch == "headless_in_terminal":
                 return self._execute_headless_terminal(
-                    session, prompt, normalized_cli, artifact_path
+                    session, prompt, normalized_cli, artifact_path, cancel_event
                 )
-            return self._execute_persistent(session, prompt, normalized_cli, artifact_path)
+            return self._execute_persistent(
+                session, prompt, normalized_cli, artifact_path, cancel_event
+            )
+
+    def kill_terminal(self, address: str) -> None:
+        """Forcefully kill a Herdr terminal by address.
+
+        This is used for cooperative cancellation when the user presses Ctrl+X
+        in the TUI. It connects to herdr-core and sends a kill command.
+        """
+        try:
+            with _HerdrSession(self) as session:
+                session.call("terminal.kill", {"terminal": address})
+                self.console.print(
+                    f"🛑 Killed Herdr terminal {address}.",
+                    style="yellow",
+                    markup=False,
+                )
+        except Exception as exc:
+            # Log but don't raise - cleanup should be best-effort
+            self.console.print(
+                f"⚠️ Failed to kill terminal {address}: {exc}",
+                style="yellow",
+                markup=False,
+            )
 
     def _debug_log(self, direction: str, payload: str) -> None:
         if self.debug:
@@ -332,11 +367,14 @@ class HerdrDelegator:
         session: _HerdrSession,
         address: str,
         initial_wait_result: Mapping[str, Any] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Mapping[str, Any]:
         deadline = time.monotonic() + self._total_timeout_for_phase()
         next_progress = time.monotonic()
         wait_result = initial_wait_result
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise DelegationError("Execution cancelled by user.")
             if wait_result is None:
                 wait_result = session.call(
                     "terminal.wait",
@@ -515,8 +553,9 @@ class HerdrDelegator:
         session: _HerdrSession,
         address: str,
         artifact_path: Path | None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
-        wait_result = self._wait_for_turn(session, address)
+        wait_result = self._wait_for_turn(session, address, cancel_event=cancel_event)
         self._print_wait_result(wait_result)
         self._cleanup_prompt_for_terminal(session, address)
         self._validate_wait_result(address, wait_result)
@@ -550,7 +589,7 @@ class HerdrDelegator:
             )
 
     def _cleanup_stale_prompts(self) -> None:
-        directory = Path.cwd() / ".poseidon" / "tmp"
+        directory = get_working_dir() / ".poseidon" / "tmp"
         if not directory.is_dir():
             return
         now = time.time()
@@ -567,6 +606,7 @@ class HerdrDelegator:
         prompt: str,
         cli_type: str,
         artifact_path: Path | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         terminal_name = f"{self.name_prefix}-{uuid.uuid4().hex[:16]}"
         run_result = session.call(
@@ -574,7 +614,7 @@ class HerdrDelegator:
             {
                 "argv": [self._AGENTS[cli_type]],
                 "name": terminal_name,
-                "cwd": str(Path.cwd()),
+                "cwd": str(get_working_dir()),
                 "wait": False,
                 "no_parent": True,
                 "outlive_parent": self.outlive_parent,
@@ -585,6 +625,7 @@ class HerdrDelegator:
         if not isinstance(address, str) or not address:
             raise DelegationError("Herdr did not return a terminal address.")
 
+        self.last_terminal_address = address
         self._debug_terminal(address)
         self._print_wait_feedback(address)
         try:
@@ -599,7 +640,7 @@ class HerdrDelegator:
                 },
             )
             wait_result = self._wait_for_turn(
-                session, address, send_result.get("wait")
+                session, address, send_result.get("wait"), cancel_event
             )
             self._print_wait_result(wait_result)
             self._validate_wait_result(address, wait_result)
@@ -631,6 +672,7 @@ class HerdrDelegator:
         prompt: str,
         cli_type: str,
         artifact_path: Path | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         prompt_path = self._write_prompt_file(prompt)
         address = "unknown"
@@ -642,7 +684,7 @@ class HerdrDelegator:
                 {
                     "line": self._headless_command_line(prompt_path, cli_type),
                     "name": f"{self.name_prefix[:15]}-{prompt_path.stem[:15]}",
-                    "cwd": str(Path.cwd()),
+                    "cwd": str(get_working_dir()),
                     "wait": False,
                     "no_parent": True,
                     "outlive_parent": self.outlive_parent,
@@ -653,9 +695,10 @@ class HerdrDelegator:
             if not isinstance(address, str) or not address:
                 raise DelegationError("Herdr did not return a terminal address.")
 
+            self.last_terminal_address = address
             self._debug_terminal(address)
             self._print_wait_feedback(address)
-            wait_result = self._wait_for_turn(session, address)
+            wait_result = self._wait_for_turn(session, address, cancel_event=cancel_event)
             self._print_wait_result(wait_result)
             self._validate_wait_result(address, wait_result)
             reason = str(wait_result.get("reason", "unknown")).lower()
@@ -698,7 +741,7 @@ class HerdrDelegator:
     def _cleanup_prompt_for_terminal(
         self, session: _HerdrSession, address: str
     ) -> None:
-        directory = Path.cwd() / ".poseidon" / "tmp"
+        directory = get_working_dir() / ".poseidon" / "tmp"
         paths = list(directory.glob("*.prompt.md"))
         if not paths:
             return
@@ -707,13 +750,13 @@ class HerdrDelegator:
         except DelegationError:
             return
         name = str(details.get("name", ""))
-        directory = Path.cwd() / ".poseidon" / "tmp"
+        directory = get_working_dir() / ".poseidon" / "tmp"
         for path in directory.glob("*.prompt.md"):
             if path.stem in name:
                 self._cleanup_prompt_file(path)
 
     def _write_prompt_file(self, prompt: str) -> Path:
-        directory = Path.cwd() / ".poseidon" / "tmp"
+        directory = get_working_dir() / ".poseidon" / "tmp"
         try:
             directory.mkdir(parents=True, exist_ok=True)
             prompt_path = directory / f"{uuid.uuid4().hex}.prompt.md"
@@ -743,7 +786,10 @@ class HerdrDelegator:
         prompt: str,
         cli_type: str,
         artifact_path: Path | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
+        if cancel_event is not None and cancel_event.is_set():
+            raise DelegationError("Execution cancelled before headless execution.")
         argv_by_agent = {
             "claude-code": ["claude", "-p", "--output-format", "text"],
             "codex": ["codex", "exec", "-"],
@@ -754,7 +800,7 @@ class HerdrDelegator:
             {
                 "argv": argv_by_agent[cli_type],
                 "input": base64.b64encode(prompt.encode("utf-8")).decode("ascii"),
-                "cwd": str(Path.cwd()),
+                "cwd": str(get_working_dir()),
                 "timeout": min(self.wait_timeout_seconds, 600),
             },
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import litellm
@@ -35,8 +36,13 @@ class ExecutionEngine:
         herdr_agent: str | None = None,
         phase_kind: str | None = None,
         artifact_path: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
-        """Execute the prompt and return the response content."""
+        """Execute the prompt and return the response content.
+
+        Args:
+            cancel_event: Optional threading.Event to signal cooperative cancellation.
+        """
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
             raise InputValidationError(f"Unsupported executor: '{executor}'.")
@@ -44,9 +50,11 @@ class ExecutionEngine:
             raise InputValidationError(
                 "The --model parameter is required when executor='api'."
             )
+        if cancel_event is not None and cancel_event.is_set():
+            raise InputValidationError("Execution cancelled.")
 
         if executor == "api":
-            return self._execute_api(messages, model_name)
+            return self._execute_api(messages, model_name, cancel_event)
         else:
             prompt = PromptBuilder.format_for_cli(messages)
             return self._execute_delegator(
@@ -56,9 +64,17 @@ class ExecutionEngine:
                 model_name,
                 phase_kind=phase_kind,
                 artifact_path=artifact_path,
+                cancel_event=cancel_event,
             )
 
-    def _execute_api(self, messages: list[dict[str, str]], model_name: str) -> str:
+    def _execute_api(
+        self,
+        messages: list[dict[str, str]],
+        model_name: str,
+        cancel_event: threading.Event | None = None,
+    ) -> str:
+        if cancel_event is not None and cancel_event.is_set():
+            raise InputValidationError("Execution cancelled before API call.")
         try:
             response = litellm.completion(
                 model=model_name,
@@ -80,6 +96,7 @@ class ExecutionEngine:
         model_name: str | None = None,
         phase_kind: str | None = None,
         artifact_path: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         try:
             if executor == "herdr":
@@ -88,6 +105,7 @@ class ExecutionEngine:
                     herdr_agent or "claude-code",
                     phase_kind=phase_kind,
                     artifact_path=artifact_path,
+                    cancel_event=cancel_event,
                 )
             else:
                 return self.delegator.execute(prompt, executor, model=model_name)

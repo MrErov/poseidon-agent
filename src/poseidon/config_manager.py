@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from poseidon.exceptions import ConfigError, ConfigValidationError
+from poseidon.utils import get_working_dir
 
 _PHASE_IDS = {
     "0": "0",
@@ -91,7 +92,7 @@ class ConfigManager:
 
     def __init__(self, config_path: str | Path | None = None) -> None:
         self.config_path = (
-            Path(config_path) if config_path is not None else Path.cwd() / "config.yaml"
+            Path(config_path) if config_path is not None else get_working_dir() / "config.yaml"
         )
 
     @property

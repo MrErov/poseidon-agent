@@ -7,7 +7,23 @@ datas = (
     + collect_data_files("textual")
     + collect_data_files("questionary")
 )
-hiddenimports = collect_submodules("litellm") + collect_submodules("textual")
+hiddenimports = (
+    collect_submodules("litellm")
+    + collect_submodules("textual")
+    + collect_submodules("questionary")
+    + [
+        "yaml",
+        "dotenv",
+        "rich.markdown",
+        "rich.table",
+        "rich.markup",
+        "rich.console",
+        "rich.text",
+        "rich.style",
+        "rich.theme",
+        "textual.widgets._text_area",
+    ]
+)
 
 a = Analysis(
     ["src/poseidon/__main__.py"],
@@ -17,10 +33,21 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
+    runtime_hooks=["runtime_hook_litellm.py"],
+    excludes=[
+        "textual_dev",
+        "pytest",
+        "black",
+        "ruff",
+        "sphinx",
+        "mypy",
+        "pyflakes",
+        "pycodestyle",
+        "bandit",
+        "flake8",
+    ],
     noarchive=False,
-    optimize=0,
+    optimize=2,
 )
 pyz = PYZ(a.pure)
 
@@ -33,7 +60,7 @@ exe = EXE(
     name="poseidon",
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,

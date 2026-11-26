@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from pathlib import Path
 
 import pytest
 from rich.console import Console
@@ -226,5 +227,87 @@ def test_tui_error_shows_error_feedback() -> None:
             assert app.query_one("#spinner", LoadingIndicator).display is False
             assert "Error" in str(app.query_one("#activity-label", Label).content)
             assert "boom" in app.output_text
+
+    asyncio.run(scenario())
+
+
+def test_get_working_dir_returns_executable_parent_when_frozen(monkeypatch) -> None:
+    """Test that get_working_dir returns the executable parent when frozen."""
+    # Simulate frozen state by directly testing the function logic
+    import poseidon.utils as utils_module
+
+    # Test the logic directly since we can't easily monkeypatch sys.frozen
+    # In frozen state: getattr(sys, 'frozen', False) returns True
+    # So we test the function with a mock sys module
+    class MockSys:
+        frozen = True
+        executable = "/fake/dir/poseidon.exe"
+
+    original_sys = utils_module.sys
+    utils_module.sys = MockSys
+    try:
+        assert utils_module.get_working_dir() == Path("/fake/dir")
+    finally:
+        utils_module.sys = original_sys
+
+
+def test_tui_cancel_calls_herdr_kill(monkeypatch) -> None:
+    """Test that cancelling a phase with Herdr calls kill_terminal."""
+    started = threading.Event()
+    release = threading.Event()
+    kill_called = threading.Event()
+
+    class BlockingRunner:
+        def __init__(self, console: Console) -> None:
+            self.console = console
+
+        def run(self, **kwargs) -> str:
+            # Simulate herdr execution with cancel_event checking
+            cancel_event = kwargs.get("cancel_event")
+            self.console.print("Working...")
+            started.set()
+            # Wait for either release or cancel
+            while not release.is_set():
+                if cancel_event is not None and cancel_event.is_set():
+                    raise RuntimeError("Cancelled")
+                release.wait(timeout=0.1)
+            return "done"
+
+    class FakeHerdr:
+        def __init__(self) -> None:
+            self.last_terminal_address = "t123"
+            self.kill_called = False
+
+        def kill_terminal(self, address: str) -> None:
+            assert address == "t123"
+            self.kill_called = True
+            kill_called.set()
+
+    def factory(console: Console, herdr_delegator) -> BlockingRunner:
+        return BlockingRunner(console)
+
+    async def scenario() -> None:
+        app = PoseidonApp(runner_factory=factory, config_resolver=_execution)
+        # Inject fake herdr
+        app._last_herdr = FakeHerdr()
+
+        async with app.run_test(size=(120, 30)) as pilot:
+            await pilot.press("ctrl+r")
+            for _ in range(200):
+                if started.is_set():
+                    break
+                await pilot.pause()
+                await asyncio.sleep(0.01)
+            assert started.is_set()
+
+            await pilot.press("ctrl+x")
+            await pilot.pause()
+
+            # Verify kill was called
+            assert kill_called.is_set(), "kill_terminal was not called on cancel"
+            assert app._last_herdr.kill_called
+
+            release.set()
+            await app.workers.wait_for_complete()
 
     asyncio.run(scenario())
