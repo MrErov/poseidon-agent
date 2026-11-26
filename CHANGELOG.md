@@ -1,14 +1,14 @@
-## [3.7.1] - 2026-11-26
-### Fixed
-- **Frozen binary support:** `get_working_dir()` utility correctly resolves the workspace directory when running as a PyInstaller onefile binary (uses `sys.executable` parent instead of `Path.cwd()`).
-- **Cooperative cancellation:** `PhaseRunner`, `ExecutionEngine`, and `HerdrDelegator` now accept a `cancel_event: threading.Event` for clean interruption of long-running phases.
-- **Herdr terminal cleanup:** `action_cancel_phase` in the TUI now calls `HerdrDelegator.kill_terminal()` to stop orphaned agent terminals on Ctrl+X.
-- **PyInstaller build:** added missing `hiddenimports` (`questionary`, `yaml`, `dotenv`, `rich.*`), `excludes` for dev dependencies, `strip=True`, `optimize=2`, and a runtime hook for `litellm` template discovery.
-
+## [3.8.0] - 2026-11-26
 ### Added
-- Tests for frozen binary path resolution and Herdr kill-on-cancel behavior.
+- **`poseidon doctor`**: new CLI command that checks environment health (`.meta-skills/`, `config.yaml`, `hc` in PATH, API keys) and reports readiness with a colored Rich table.
+- **Structured JSONL logging**: set `POSEIDON_LOG_JSON=1` to emit `phase_start`, `llm_call`, `llm_response`, `phase_end`, `error` events to `.poseidon/poseidon.log.jsonl` for production debugging.
+- **Optional `litellm` dependency**: moved to `[api]` extra (`pip install poseidon-agent[api]`); friendly error if missing when using `--executor api`.
+- **5-Minute Quickstart** in README for zero-friction onboarding.
 
-## [3.7.0] - 2026-11-26
+### Changed
+- `pyproject.toml`: `litellm` moved to optional dependency; core deps now ~70 MB lighter without API extra.
+
+## [3.7.1] - 2026-11-26
 ### Added
 - **Responsive TUI:** breakpoints collapse the phase sidebar into a selector on narrow terminals and show a minimum-size notice when the terminal is too small.
 - **Theme-aware styling:** the Textual UI uses design tokens (`$primary`, `$surface`, `$panel`, `$accent`, `$success`, `$warning`, `$error`) instead of hardcoded colors, so light and dark themes stay readable.

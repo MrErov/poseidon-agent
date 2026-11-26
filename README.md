@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.7.1-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.8.0-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-161%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-188%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -30,6 +30,38 @@
 <div align="center">
   <img src="docs/assets/tui-demo.gif" alt="Poseidon Agent TUI demo" width="800">
 </div>
+
+## 🚀 5-Minute Quickstart
+
+```bash
+# 1. Install (Python 3.10+, uv recommended)
+uv tool install poseidon-agent
+# or: pipx install poseidon-agent
+# or: pip install poseidon-agent
+
+# 2. Navigate to your project (must have .meta-skills/ with phase templates)
+cd my-project
+
+# 3. Optional: create config.yaml for custom roles/executors
+cat > config.yaml <<'EOF'
+version: 2
+default_role: tester
+roles:
+  tester:
+    executor: api
+    model: nvidia_nim/nemotron-3-ultra
+EOF
+
+# 4. Run the interactive wizard
+poseidon run -i
+# Follow prompts: select phase → spec → role → watch it execute
+
+# That's it! Check generated artifacts in specs/
+```
+
+**No config?** Poseidon works with smart defaults: `uv tool install poseidon-agent` → `cd your-project` → `poseidon run -i`.
+
+---
 
 Poseidón is the deterministic execution engine for the **Keel Nav** protocol. It turns a guided map into auditable software: it isolates memory, delegates inference, persists artifacts and enforces state transitions — the Navigator stays in control of every step.
 
@@ -309,6 +341,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.8.0** — `poseidon doctor`, structured JSONL logging, optional `litellm` dependency, Quickstart docs.
 - **v3.7.1** - Frozen binary support, cooperative cancellation, Herdr terminal cleanup, PyInstaller hardening.
 - **v3.7.0** - Responsive TUI, theme tokens, live spinner, and PyInstaller builds.
 - **v3.6.1** — Fully English auto-detect notice.

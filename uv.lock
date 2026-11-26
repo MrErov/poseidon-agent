@@ -1992,11 +1992,10 @@ wheels = [
 
 [[package]]
 name = "poseidon-agent"
-version = "3.7.1"
+version = "3.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "litellm" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "questionary" },
@@ -2007,6 +2006,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+api = [
+    { name = "litellm" },
+]
 binary = [
     { name = "pyinstaller" },
 ]
@@ -2021,7 +2023,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "litellm", specifier = ">=1.60,<2" },
+    { name = "litellm", marker = "extra == 'api'", specifier = ">=1.60,<2" },
     { name = "pyinstaller", marker = "extra == 'binary'", specifier = ">=6.11,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<10" },
     { name = "python-dotenv", specifier = ">=1.0,<2" },
@@ -2032,7 +2034,7 @@ requires-dist = [
     { name = "textual", specifier = ">=0.85,<10" },
     { name = "typer", specifier = ">=0.16,<1" },
 ]
-provides-extras = ["binary", "dev"]
+provides-extras = ["api", "binary", "dev"]
 
 [[package]]
 name = "prompt-toolkit"

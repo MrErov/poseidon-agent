@@ -350,3 +350,58 @@ roles:
     assert "1b" in result.output
     assert "specs/US-002.spec.md" in result.output
     assert "certified" in result.output
+
+
+def test_doctor_command_reports_ready(tmp_path: Path, monkeypatch) -> None:
+    """Test doctor command when environment is ready."""
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "00-context-bootstrap.md").write_text("Bootstrap", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text(
+        "version: 2\n"
+        "default_role: tester\n"
+        "roles:\n"
+        "  tester:\n"
+        "    executor: api\n"
+        "    model: test-model\n",
+        encoding="utf-8",
+    )
+
+    with patch("shutil.which", return_value="/usr/bin/hc"):
+        result = cli.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0, result.output
+    assert "✅" in result.output
+    assert "ready for Poseidon" in result.output
+
+
+def test_doctor_command_reports_missing_meta_skills(tmp_path: Path, monkeypatch) -> None:
+    """Test doctor command when .meta-skills is missing."""
+    monkeypatch.chdir(tmp_path)
+
+    with patch("shutil.which", return_value="/usr/bin/hc"):
+        result = cli.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1, result.output
+    assert "❌" in result.output
+    assert "Missing at" in result.output
+
+
+def test_doctor_command_reports_invalid_config(tmp_path: Path, monkeypatch) -> None:
+    """Test doctor command when config.yaml is invalid."""
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "00-context-bootstrap.md").write_text("Bootstrap", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text(
+        "invalid: yaml: [",
+        encoding="utf-8",
+    )
+
+    with patch("shutil.which", return_value="/usr/bin/hc"):
+        result = cli.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1, result.output
+    assert "❌" in result.output
+    assert "Invalid:" in result.output

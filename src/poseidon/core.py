@@ -6,7 +6,11 @@ import re
 import threading
 from pathlib import Path
 
-import litellm  # noqa: F401 - re-exported for backward compatibility with tests
+# litellm is now an optional dependency (api extra). Re-export for backward compatibility.
+try:
+    import litellm  # noqa: F401 - re-exported for backward compatibility with tests
+except ImportError:  # pragma: no cover - optional dependency
+    litellm = None  # type: ignore[assignment,unused-ignore]
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -32,7 +36,7 @@ from poseidon.types import (
     SpecStatus,
     _split_frontmatter,
 )
-from poseidon.utils import get_working_dir
+from poseidon.utils import get_working_dir, log_event
 
 
 class PhaseRunner:
@@ -77,6 +81,15 @@ class PhaseRunner:
             )
         if cancel_event is not None and cancel_event.is_set():
             raise InputValidationError("Execution cancelled before start.")
+
+        log_event(
+            "phase_start",
+            phase=phase,
+            executor=executor,
+            model=model_name,
+            spec_path=spec_path,
+            context_path=context_path,
+        )
 
         phase_file = self._resolve_phase_file(phase)
         phase_kind = self._phase_kind(phase, phase_file)
@@ -131,15 +144,35 @@ class PhaseRunner:
             phase_kind=phase_kind,
         )
 
-        content = self.execution_engine.execute(
-            messages,
-            executor,
-            model_name,
-            herdr_agent,
-            phase_kind=phase_kind,
-            artifact_path=artifact_path,
-            cancel_event=cancel_event,
+        log_event(
+            "llm_call",
+            phase=phase,
+            executor=executor,
+            model=model_name,
+            message_count=len(messages),
         )
+
+        try:
+            content = self.execution_engine.execute(
+                messages,
+                executor,
+                model_name,
+                herdr_agent,
+                phase_kind=phase_kind,
+                artifact_path=artifact_path,
+                cancel_event=cancel_event,
+            )
+        except Exception as exc:
+            log_event(
+                "error",
+                phase=phase,
+                executor=executor,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise
+
+        log_event("llm_response", phase=phase, executor=executor, response_length=len(content))
 
         self.console.print(Markdown(content))
 
@@ -159,6 +192,14 @@ class PhaseRunner:
             artifact_path = self._save_artifact(phase_kind, content, spec_file, context_file)
         if phase_kind in {"goldfish", "odd", "drift", "tdd"}:
             self._update_spec_metadata(spec_file, content, artifact_path, phase_kind)
+
+        log_event(
+            "phase_end",
+            phase=phase,
+            executor=executor,
+            status="success",
+            artifact_path=str(artifact_path) if artifact_path else None,
+        )
 
         return content
 

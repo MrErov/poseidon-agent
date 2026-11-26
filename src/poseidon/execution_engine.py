@@ -5,14 +5,30 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-import litellm
-
 from poseidon.delegator import DelegationError, LocalCLIDelegator
 from poseidon.exceptions import CompletionError, InputValidationError
 from poseidon.herdr_delegator import HerdrDelegator
 from poseidon.prompt_builder import PromptBuilder
 
 _LOCAL_EXECUTORS = {"claude-code", "codex", "opencode"}
+
+# Backward compatibility: some tests patch poseidon.execution_engine.litellm.completion
+try:
+    import litellm  # noqa: F401
+except ImportError:  # pragma: no cover - optional dependency
+    litellm = None  # type: ignore[assignment,unused-ignore]
+
+
+def _import_litellm() -> Any:
+    """Import litellm, raising a helpful error if not installed."""
+    try:
+        import litellm
+        return litellm
+    except ImportError as exc:
+        raise InputValidationError(
+            "The 'api' executor requires the 'litellm' package. "
+            "Install it with: pip install 'poseidon-agent[api]'"
+        ) from exc
 
 
 class ExecutionEngine:
@@ -75,6 +91,7 @@ class ExecutionEngine:
     ) -> str:
         if cancel_event is not None and cancel_event.is_set():
             raise InputValidationError("Execution cancelled before API call.")
+        litellm = _import_litellm()
         try:
             response = litellm.completion(
                 model=model_name,

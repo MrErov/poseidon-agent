@@ -1,5 +1,7 @@
 """Poseidón command-line interface."""
 
+import os
+import shutil
 from pathlib import Path
 from typing import Annotated
 
@@ -345,6 +347,141 @@ def tui_command() -> None:
     from poseidon.tui import PoseidonApp
 
     PoseidonApp().run()
+
+
+@app.command("doctor")
+def doctor_command() -> None:
+    """Check environment health and report readiness."""
+    _configure_utf8_output()
+    load_dotenv()
+
+    console = Console()
+    table = Table(
+        title="🩺 Poseidon Environment Doctor",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Check", style="bold")
+    table.add_column("Status", justify="center")
+    table.add_column("Detail")
+
+    all_ok = True
+
+    # 1. .meta-skills directory
+    working_dir = get_working_dir()
+    meta_skills_dir = working_dir / ".meta-skills"
+    if meta_skills_dir.is_dir():
+        # Check for at least some skill files
+        skill_files = list(meta_skills_dir.glob("*.md"))
+        if skill_files:
+            table.add_row(
+                ".meta-skills/",
+                "[green]✅[/green]",
+                f"Found {len(skill_files)} skill file(s)",
+            )
+        else:
+            table.add_row(
+                ".meta-skills/",
+                "[yellow]⚠️[/yellow]",
+                "Directory exists but no .md skill files found",
+            )
+            all_ok = False
+    else:
+        table.add_row(
+            ".meta-skills/",
+            "[red]❌[/red]",
+            f"Missing at {meta_skills_dir}",
+        )
+        all_ok = False
+
+    # 2. templates/ directory (optional but recommended)
+    templates_dir = working_dir / "templates"
+    if templates_dir.is_dir():
+        table.add_row(
+            "templates/",
+            "[green]✅[/green]",
+            "Template directory found",
+        )
+    else:
+        table.add_row(
+            "templates/",
+            "[dim]ℹ️[/dim]",
+            "Optional: not found (some phases may need it)",
+        )
+
+    # 3. config.yaml
+    config_path = working_dir / "config.yaml"
+    if config_path.is_file():
+        try:
+            cm = ConfigManager(config_path)
+            _ = cm.default_role  # triggers validation
+            table.add_row(
+                "config.yaml",
+                "[green]✅[/green]",
+                "Valid configuration loaded",
+            )
+        except ConfigError as exc:
+            table.add_row(
+                "config.yaml",
+                "[red]❌[/red]",
+                f"Invalid: {exc}",
+            )
+            all_ok = False
+    else:
+        table.add_row(
+            "config.yaml",
+            "[yellow]⚠️[/yellow]",
+            "Not found (will use defaults)",
+        )
+
+    # 4. Herdr CLI (hc)
+    hc_path = shutil.which("hc")
+    if hc_path:
+        table.add_row(
+            "hc (Herdr CLI)",
+            "[green]✅[/green]",
+            f"Found at {hc_path}",
+        )
+    else:
+        table.add_row(
+            "hc (Herdr CLI)",
+            "[red]❌[/red]",
+            "Not in PATH (required for --executor herdr)",
+        )
+        all_ok = False
+
+    # 5. API Keys
+    api_keys = {
+        "NVIDIA_NIM_API_KEY": "NVIDIA NIM",
+        "OPENAI_API_KEY": "OpenAI",
+        "ANTHROPIC_API_KEY": "Anthropic",
+    }
+    for env_var, label in api_keys.items():
+        if os.environ.get(env_var):
+            table.add_row(
+                f"{label} API Key",
+                "[green]✅[/green]",
+                f"{env_var} is set",
+            )
+        else:
+            table.add_row(
+                f"{label} API Key",
+                "[yellow]⚠️[/yellow]",
+                f"{env_var} not set (needed for API executor)",
+            )
+
+    console.print(table)
+    console.print()
+
+    if all_ok:
+        console.print(
+            "[bold green]🎉 Your environment is ready for Poseidon![/bold green]"
+        )
+    else:
+        console.print(
+            "[bold red]⚠️ Please fix the issues above before running Poseidon.[/bold red]"
+        )
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
