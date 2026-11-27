@@ -48,8 +48,8 @@ jobs:
         run: |
           # Install Inno Setup
           choco install innosetup -y --no-progress
-          # Create installer script
-          cat > installer.iss << 'EOF'
+          # Create installer script using PowerShell
+          $issContent = @"
           [Setup]
           AppName=Poseidon Agent
           AppVersion={{VERSION}}
@@ -71,11 +71,9 @@ jobs:
 
           [Run]
           Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent
-          EOF
-          # Replace version placeholder
-          $version = "${{ github.ref_name }}"
-          $version = $version.TrimStart('v')
-          (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
+"@
+          $issContent = $issContent -replace '{{VERSION}}', "${{ github.ref_name }}".TrimStart('v')
+          Set-Content -Path installer.iss -Value $issContent -Encoding UTF8
           # Build installer - try common paths
           $isccPaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
@@ -87,6 +85,8 @@ jobs:
           }
           if (-not $ISCC) {
             Write-Error "ISCC.exe not found after Inno Setup installation"
+            Get-ChildItem "C:\Program Files" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
+            Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
             exit 1
           }
           Write-Host "Using ISCC: $ISCC"
