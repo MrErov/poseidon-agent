@@ -47,18 +47,8 @@ jobs:
       - name: Create Inno Setup installer
         shell: powershell
         run: |
-          # Install Inno Setup 6.2.2 using the official installer
-          $isccUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
-          $installerPath = "$env:TEMP\innosetup.exe"
-          Write-Host "Downloading Inno Setup from $isccUrl"
-          Invoke-WebRequest -Uri $isccUrl -OutFile $installerPath -UseBasicParsing
-          Write-Host "Installing Inno Setup silently..."
-          $installArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-"
-          $process = Start-Process -FilePath $installerPath -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
-          if ($process.ExitCode -ne 0) {
-            Write-Error "Inno Setup installation failed with exit code $($process.ExitCode)"
-            exit 1
-          }
+          # Install Inno Setup via chocolatey (reliable on windows-latest)
+          choco install innosetup -y --no-progress
           # Find ISCC.exe
           $isccPaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
