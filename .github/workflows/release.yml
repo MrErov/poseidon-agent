@@ -78,6 +78,7 @@ jobs:
           (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
           # Build installer
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        continue-on-error: true
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -85,6 +86,7 @@ jobs:
           name: poseidon-windows-installer
           path: dist/poseidon-agent-setup.exe
           retention-days: 30
+        if: always()
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
@@ -92,6 +94,7 @@ jobs:
           name: poseidon-windows-binary
           path: dist/poseidon.exe
           retention-days: 30
+        if: always()
 
   build-linux:
     name: Build Linux Binary
@@ -209,6 +212,7 @@ jobs:
             dist/poseidon
             dist/poseidon-agent-setup.exe
           generate_release_notes: false
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
