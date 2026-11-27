@@ -194,23 +194,53 @@ poseidon run --phase 1b
 - `poseidon run` without arguments or with `-i` opens a wizard for phase, spec, and role.
 - `poseidon status` prints a Rich table with available phases, each spec's `status:`, and the default role.
 
-### Local Executors
-
-With `--executor api` (default) `--model` is required. Otherwise the CLI manages its own auth:
+### Power-User Commands
 
 ```bash
-poseidon run --phase 1b --spec specs/US-001.md --executor claude-code
-poseidon run --phase 2 --spec specs/US-001.md --executor codex
-poseidon run --phase 0 --executor opencode
+# Environment health: .meta-skills, config.yaml, hc in PATH, API keys
+poseidon doctor
+
+# MCP registry: see every MCP server across your agents
+poseidon mcp list
+
+# Copy an MCP server from one agent to another (safe merge, nothing deleted)
+poseidon mcp sync graphify --from opencode --to claude
+
+# Resume a failed phase instead of paying for it again (API executor)
+poseidon run --phase 1a --spec specs/US-001.md --resume
+
+# Resume a Herdr terminal after a crash
+poseidon run --phase 1b --executor herdr --resume t19
 ```
 
-| Executor | Invocation |
-|----------|------------|
-| `claude-code` | `claude -p --output-format text` (prompt via stdin) |
-| `codex` | `codex exec -` (prompt via stdin) |
-| `opencode` | `opencode run` (no positional message; prompt via stdin) |
+Sessions are saved to `.poseidon/sessions/` after every successful API call, so a timeout or network drop costs you nothing on retry.
 
-All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Override binaries with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` or `POSEIDON_OPENCODE_BIN`.
+### Agents & Executors
+
+Poseidón runs phases through five interchangeable executors. Choose one per run with `--executor`, or bind it to a role in `config.yaml`.
+
+| Agent | CLI / Flag | What you get |
+|-------|-----------|--------------|
+| **LiteLLM API** | `--executor api --model <model>` | 100+ providers (NVIDIA NIM, OpenAI, Anthropic, DeepSeek…), deterministic `temperature=0.0`, **session resume** — a network failure never re-spends tokens |
+| **Claude Code** | `--executor claude-code` | Prompt via stdin, `claude -p --output-format text`, uses your existing subscription |
+| **Codex** | `--executor codex` | Prompt via stdin, `codex exec -`, uses your existing subscription |
+| **OpenCode** | `--executor opencode` | Prompt via stdin, `opencode run`, `--auto` approves permissions |
+| **Herdr runtime** | `--executor herdr` | Runs any agent above inside a **persistent terminal**: session resume, artifact ownership, per-phase timeouts, `--resume t19` |
+
+```bash
+# API — deterministic and resumable
+poseidon run --phase 1b --spec specs/US-001.md --model nvidia_nim/nemotron-3-ultra
+
+# Local CLIs — bring your own subscription
+poseidon run --phase 1b --spec specs/US-001.md --executor claude-code
+poseidon run --phase 2  --spec specs/US-001.md --executor codex
+poseidon run --phase 0  --executor opencode
+
+# Herdr — a terminal that survives crashes and timeouts
+poseidon run --phase 1b --spec specs/US-001.md --executor herdr
+```
+
+`--model` is required with `--executor api`; local executors manage their own auth. All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Override binaries with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` or `POSEIDON_OPENCODE_BIN`.
 
 ### Agent Roles & Herdr
 

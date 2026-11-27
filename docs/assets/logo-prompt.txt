@@ -1,0 +1,50 @@
+POSEIDON LOGO — CORRECTION PROMPT (v4.0.0 Golden Master)
+=========================================================
+
+Corrections requested (vs. v3.x logo):
+- Trident held in LEFT hand, resting at his side, with an ANATOMICALLY CORRECT
+  relaxed NEUTRAL GRIP: thumb extended pointing UPWARD along the shaft axis,
+  fingers wrapping underneath the shaft, wrist relaxed. NOT a closed fist.
+
+Elements to PRESERVE (unchanged):
+- Circular badge composition with thick border
+- Deep navy blue ocean background with stylized waves
+- Poseidon: long flowing white hair + white beard, golden crown, white toga with gold belt
+- Right arm raised holding a glowing warm-yellow lantern, casting a beam downward
+- Bold vector illustration style, thick clean outlines
+- Limited palette: deep navy blue, gold, cream white, warm light
+- Professional game-badge / badging art, high detail, clean composition
+
+Full prompt
+-----------
+Circular badge illustration of Poseidon, god of the sea, full body standing on
+a rock. Navy blue ocean background with stylized waves inside a thick circular
+border. Poseidon has long flowing white hair, white beard, wearing a golden
+crown and a white toga with gold belt. His right arm is raised holding a
+glowing warm yellow lantern that casts a beam of light downward. His left hand
+holds a golden trident resting at his side with an anatomically correct natural
+relaxed neutral grip: the thumb is extended pointing upward along the wooden
+shaft, fingers wrapping underneath the shaft, wrist relaxed and natural, not a
+closed fist. The trident head is visible at top with three prongs. Bold vector
+illustration style, thick clean outlines, limited color palette of deep navy
+blue, gold, cream white, warm light. Clean symmetrical composition, high detail,
+professional game badge art.
+
+Alternative (stronger gesture readability)
+------------------------------------------
+Same as above, but: the trident is angled slightly forward (about 15-20 degrees)
+with the shaft clearly visible so the neutral thumb-up grip reads clearly, and
+the trident head remains above shoulder height.
+
+Edit-existing-image variant
+---------------------------
+[Attach current docs/assets/logo.png] "Fix ONLY the left hand: replace the
+closed-fist grip on the trident shaft with a natural relaxed neutral grip —
+thumb extended pointing up along the shaft, fingers wrapping underneath, wrist
+relaxed. Keep everything else identical: same pose, crown, lantern, palette,
+styling, and composition."
+
+Output
+------
+Save as docs/assets/logo.png (PNG, square, min 1024x1024, transparent or navy
+circular background).

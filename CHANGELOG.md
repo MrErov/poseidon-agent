@@ -1,3 +1,8 @@
+## [Unreleased]
+### Changed
+- README: replaced the "Local Executors" table with an "Agents & Executors" reference covering all five executors (API, Claude Code, Codex, OpenCode, Herdr) and their capabilities.
+- README: added a "Power-User Commands" section documenting `doctor`, `mcp list`, `mcp sync`, and `--resume`.
+
 ## [4.0.0] - 2026-11-26
 ### Added
 - **Golden Master Release**: Production-ready milestone with all core features stabilized.
