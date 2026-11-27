@@ -48,6 +48,8 @@ jobs:
         run: |
           # Install Inno Setup
           choco install innosetup -y --no-progress
+          # Verify Inno Setup installation
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /?
           # Create installer script
           cat > installer.iss << 'EOF'
           [Setup]
@@ -78,7 +80,15 @@ jobs:
           (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
           # Build installer
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
-        continue-on-error: true
+          # Verify output
+          if (Test-Path "dist\poseidon-agent-setup.exe") {
+            Write-Host "Installer created successfully: dist\poseidon-agent-setup.exe"
+            Get-Item "dist\poseidon-agent-setup.exe" | Select-Object Name, Length
+          } else {
+            Write-Error "Installer was not created!"
+            exit 1
+          }
+        shell: powershell
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4

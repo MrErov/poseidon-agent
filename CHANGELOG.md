@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [4.1.2] - 2026-11-27
+### Fixed
+- **Windows Installer Pipeline**: Removed `continue-on-error: true` from Inno Setup step; added explicit verification (`Test-Path`) and `shell: powershell` to ensure the installer artifact is built and uploaded on every tagged release.
+- **Release Assets**: `poseidon-agent-setup.exe` now reliably appears in GitHub Releases alongside `poseidon.exe` and the Linux/macOS binaries.
+
+### Changed
+- **Test Count**: Confirmed 213 tests passing (11 more than v4.1.0); no tests were lost during v4.1.1.
+
 ## [4.1.1] - 2026-11-27
 ### Added
 - **`poseidon config init`**: Interactive wizard that creates a complete `config.yaml` with `roles`, `phase_roles`, `herdr`, and `model_routing`. Offers NVIDIA NIM suggestions (Kimi K2, Nemotron 3 Ultra, Mistral Large) plus free-text custom model identifiers.
