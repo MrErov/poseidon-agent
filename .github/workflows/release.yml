@@ -46,13 +46,7 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Download and install Inno Setup 6.2.2 directly (more reliable than choco/winget on runners)
-          $isccUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
-          $installerPath = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $isccUrl -OutFile $installerPath
-          # Silent install
-          Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait -NoNewWindow
-          # Find ISCC.exe
+          # Check if Inno Setup is pre-installed on the runner
           $isccPaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
             "C:\Program Files\Inno Setup 6\ISCC.exe"
@@ -61,6 +55,14 @@ jobs:
           $ISCC = $null
           foreach ($p in $isccPaths) {
             if (Test-Path $p) { $ISCC = $p; break }
+          }
+          # If not found, install it via chocolatey
+          if (-not $ISCC) {
+            Write-Host "Inno Setup not found, installing via chocolatey..."
+            choco install innosetup -y --no-progress
+            foreach ($p in $isccPaths) {
+              if (Test-Path $p) { $ISCC = $p; break }
+            }
           }
           if (-not $ISCC) {
             Write-Error "ISCC.exe not found after Inno Setup installation"
