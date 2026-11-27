@@ -46,8 +46,8 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Install Inno Setup
-          choco install innosetup -y --no-progress
+          # Install Inno Setup via winget (built into Windows)
+          winget install --id=InnoSetup.InnoSetup --silent --accept-source-agreements --accept-package-agreements
           # Find ISCC.exe location
           $isccPaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
@@ -60,6 +60,8 @@ jobs:
           }
           if (-not $ISCC) {
             Write-Error "ISCC.exe not found after Inno Setup installation"
+            Get-ChildItem "C:\Program Files" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
+            Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
             exit 1
           }
           Write-Host "Using ISCC at: $ISCC"
