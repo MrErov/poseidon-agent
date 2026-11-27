@@ -46,9 +46,13 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Install Inno Setup via winget (built into Windows)
-          winget install --id=InnoSetup.InnoSetup --silent --accept-source-agreements --accept-package-agreements
-          # Find ISCC.exe location
+          # Download and install Inno Setup 6.2.2 directly (more reliable than choco/winget on runners)
+          $isccUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
+          $installerPath = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $isccUrl -OutFile $installerPath
+          # Silent install
+          Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait -NoNewWindow
+          # Find ISCC.exe
           $isccPaths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
             "C:\Program Files\Inno Setup 6\ISCC.exe"
