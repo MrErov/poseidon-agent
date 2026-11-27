@@ -1,3 +1,14 @@
+## [4.0.0] - 2026-11-26
+### Added
+- **Golden Master Release**: Production-ready milestone with all core features stabilized.
+- **Complete Feature Set**: Responsive TUI, Herdr delegation, MCP Registry Manager, API Session Resume, Doctor, JSONL Logging, optional `litellm`, Release Pipeline.
+- **214 Tests**: Full test coverage including unit, integration, TUI layout, MCP, and session resume tests.
+
+### Changed
+- Version bump to 4.0.0 (Golden Master) — API and CLI considered stable.
+- Documentation polished: README restructured with Quickstart, comprehensive usage, troubleshooting.
+- All lints pass (Ruff clean), all tests pass (214), binary builds (99.9 MB).
+
 ## [3.9.0] - 2026-11-26
 ### Added
 - **MCP Registry Manager** (`poseidon mcp`): `list` command scans OpenCode, Codex, and Claude Code configs; `sync` command copies MCP servers between agents with safe JSON/TOML merging.
