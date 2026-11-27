@@ -397,3 +397,5 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 ## License
 
 MIT License.
+#   C I   t r i g g e r  
+ 
