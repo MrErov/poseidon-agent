@@ -12,6 +12,7 @@
 - **Phase Aliases**: `ModelRouter` now resolves aliases such as `goldfish`, `tdd`, and `drift` through the shared `PHASE_ALIASES` map.
 - **TUI**: Fixed model resolution to use the selected role (`resolve_role`) instead of forwarding the role name as a model.
 - **README**: Quickstart now starts with `poseidon config init` and `poseidon doctor`; added model-routing commands to the Power-User section.
+- **Release Workflow**: Removed the unsupported `cache: 'uv'` option from `actions/setup-python@v5`, which made every tagged release fail before the build started.
 - **Tests**: Added 11 tests covering the wizard, `models list`, defaults, custom models, cancellation, invalid configs, phase aliases, and role resolution.
 
 ## [4.1.0] - 2026-11-27
