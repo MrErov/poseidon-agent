@@ -46,9 +46,35 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Install Inno Setup
-          choco install innosetup -y --no-progress
-          # Create installer script using PowerShell
+          # Install Inno Setup 6.2.2 using the official installer
+          $isccUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
+          $installerPath = "$env:TEMP\innosetup.exe"
+          Write-Host "Downloading Inno Setup from $isccUrl"
+          Invoke-WebRequest -Uri $isccUrl -OutFile $installerPath -UseBasicParsing
+          Write-Host "Installing Inno Setup silently..."
+          $installArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-"
+          $process = Start-Process -FilePath $installerPath -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) {
+            Write-Error "Inno Setup installation failed with exit code $($process.ExitCode)"
+            exit 1
+          }
+          # Find ISCC.exe
+          $isccPaths = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          $ISCC = $null
+          foreach ($p in $isccPaths) {
+            if (Test-Path $p) { $ISCC = $p; break }
+          }
+          if (-not $ISCC) {
+            Write-Error "ISCC.exe not found after Inno Setup installation"
+            Get-ChildItem "C:\Program Files" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
+            Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "Using ISCC: $ISCC"
+          # Create installer script using PowerShell here-string
           $issContent = @"
           [Setup]
           AppName=Poseidon Agent
@@ -74,22 +100,8 @@ jobs:
 "@
           $issContent = $issContent -replace '{{VERSION}}', "${{ github.ref_name }}".TrimStart('v')
           Set-Content -Path installer.iss -Value $issContent -Encoding UTF8
-          # Build installer - try common paths
-          $isccPaths = @(
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-            "C:\Program Files\Inno Setup 6\ISCC.exe"
-          )
-          $ISCC = $null
-          foreach ($p in $isccPaths) {
-            if (Test-Path $p) { $ISCC = $p; break }
-          }
-          if (-not $ISCC) {
-            Write-Error "ISCC.exe not found after Inno Setup installation"
-            Get-ChildItem "C:\Program Files" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
-            Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
-            exit 1
-          }
-          Write-Host "Using ISCC: $ISCC"
+          # Build installer
+          Write-Host "Building installer..."
           & $ISCC installer.iss
           # Verify output
           if (Test-Path "dist\poseidon-agent-setup.exe") {
