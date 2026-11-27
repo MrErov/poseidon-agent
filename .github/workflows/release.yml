@@ -46,28 +46,8 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Check for pre-installed ISCC (windows-latest may have it)
-          $ISCC = $null
-          $paths = @(
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-            "C:\Program Files\Inno Setup 6\ISCC.exe"
-          )
-          foreach ($p in $paths) {
-            if (Test-Path $p) { $ISCC = $p; break }
-          }
-          # Fallback: install via chocolatey
-          if (-not $ISCC) {
-            Write-Host "Installing Inno Setup via chocolatey..."
-            choco install innosetup -y --no-progress
-            foreach ($p in $paths) {
-              if (Test-Path $p) { $ISCC = $p; break }
-            }
-          }
-          if (-not $ISCC) {
-            Write-Error "ISCC.exe not found"
-            exit 1
-          }
-          Write-Host "Using ISCC: $ISCC"
+          # Install Inno Setup
+          choco install innosetup -y --no-progress
           # Create installer script
           cat > installer.iss << 'EOF'
           [Setup]
@@ -92,17 +72,31 @@ jobs:
           [Run]
           Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent
           EOF
-          # Replace version
+          # Replace version placeholder
           $version = "${{ github.ref_name }}"
           $version = $version.TrimStart('v')
           (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
-          # Build
+          # Build installer - try common paths
+          $isccPaths = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          $ISCC = $null
+          foreach ($p in $isccPaths) {
+            if (Test-Path $p) { $ISCC = $p; break }
+          }
+          if (-not $ISCC) {
+            Write-Error "ISCC.exe not found after Inno Setup installation"
+            exit 1
+          }
+          Write-Host "Using ISCC: $ISCC"
           & $ISCC installer.iss
+          # Verify output
           if (Test-Path "dist\poseidon-agent-setup.exe") {
             Write-Host "Installer created: dist\poseidon-agent-setup.exe"
             Get-Item "dist\poseidon-agent-setup.exe" | Select-Object Name, Length
           } else {
-            Write-Error "Installer not created!"
+            Write-Error "Installer was not created!"
             exit 1
           }
         shell: powershell
