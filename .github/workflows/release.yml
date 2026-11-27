@@ -46,31 +46,28 @@ jobs:
 
       - name: Create Inno Setup installer
         run: |
-          # Check if Inno Setup is pre-installed on the runner
-          $isccPaths = @(
+          # Check for pre-installed ISCC (windows-latest may have it)
+          $ISCC = $null
+          $paths = @(
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
             "C:\Program Files\Inno Setup 6\ISCC.exe"
-            "C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
           )
-          $ISCC = $null
-          foreach ($p in $isccPaths) {
+          foreach ($p in $paths) {
             if (Test-Path $p) { $ISCC = $p; break }
           }
-          # If not found, install it via chocolatey
+          # Fallback: install via chocolatey
           if (-not $ISCC) {
-            Write-Host "Inno Setup not found, installing via chocolatey..."
+            Write-Host "Installing Inno Setup via chocolatey..."
             choco install innosetup -y --no-progress
-            foreach ($p in $isccPaths) {
+            foreach ($p in $paths) {
               if (Test-Path $p) { $ISCC = $p; break }
             }
           }
           if (-not $ISCC) {
-            Write-Error "ISCC.exe not found after Inno Setup installation"
-            Get-ChildItem "C:\Program Files" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
-            Get-ChildItem "C:\Program Files (x86)" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue
+            Write-Error "ISCC.exe not found"
             exit 1
           }
-          Write-Host "Using ISCC at: $ISCC"
+          Write-Host "Using ISCC: $ISCC"
           # Create installer script
           cat > installer.iss << 'EOF'
           [Setup]
@@ -95,18 +92,17 @@ jobs:
           [Run]
           Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent
           EOF
-          # Replace version placeholder
+          # Replace version
           $version = "${{ github.ref_name }}"
           $version = $version.TrimStart('v')
           (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
-          # Build installer
+          # Build
           & $ISCC installer.iss
-          # Verify output
           if (Test-Path "dist\poseidon-agent-setup.exe") {
-            Write-Host "Installer created successfully: dist\poseidon-agent-setup.exe"
+            Write-Host "Installer created: dist\poseidon-agent-setup.exe"
             Get-Item "dist\poseidon-agent-setup.exe" | Select-Object Name, Length
           } else {
-            Write-Error "Installer was not created!"
+            Write-Error "Installer not created!"
             exit 1
           }
         shell: powershell
