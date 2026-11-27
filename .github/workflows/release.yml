@@ -1,6 +1,6 @@
 name: Release
 
-on:
+'on':
   push:
     tags:
       - 'v*'
@@ -45,6 +45,7 @@ jobs:
           uv run pyinstaller --clean --noconfirm build.spec
 
       - name: Create Inno Setup installer
+        shell: powershell
         run: |
           # Install Inno Setup 6.2.2 using the official installer
           $isccUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
@@ -74,30 +75,31 @@ jobs:
             exit 1
           }
           Write-Host "Using ISCC: $ISCC"
-          # Create installer script using PowerShell here-string
-          $issContent = @"
-          [Setup]
-          AppName=Poseidon Agent
-          AppVersion={{VERSION}}
-          DefaultDirName={autopf}\Poseidon Agent
-          DefaultGroupName=Poseidon Agent
-          OutputDir=dist
-          OutputBaseFilename=poseidon-agent-setup
-          Compression=lzma
-          SolidCompression=yes
-          WizardStyle=modern
-          ArchitecturesInstallIn64BitMode=x64
-
-          [Files]
-          Source: "dist\poseidon.exe"; DestDir: "{app}"; Flags: ignoreversion
-
-          [Icons]
-          Name: "{group}\Poseidon Agent"; Filename: "{app}\poseidon.exe"
-          Name: "{commondesktop}\Poseidon Agent"; Filename: "{app}\poseidon.exe"
-
-          [Run]
-          Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent
-"@
+          # Create installer script file
+          $issLines = @(
+            '[Setup]'
+            'AppName=Poseidon Agent'
+            'AppVersion={{VERSION}}'
+            'DefaultDirName={autopf}\Poseidon Agent'
+            'DefaultGroupName=Poseidon Agent'
+            'OutputDir=dist'
+            'OutputBaseFilename=poseidon-agent-setup'
+            'Compression=lzma'
+            'SolidCompression=yes'
+            'WizardStyle=modern'
+            'ArchitecturesInstallIn64BitMode=x64'
+            ''
+            '[Files]'
+            'Source: "dist\poseidon.exe"; DestDir: "{app}"; Flags: ignoreversion'
+            ''
+            '[Icons]'
+            'Name: "{group}\Poseidon Agent"; Filename: "{app}\poseidon.exe"'
+            'Name: "{commondesktop}\Poseidon Agent"; Filename: "{app}\poseidon.exe"'
+            ''
+            '[Run]'
+            'Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent'
+          )
+          $issContent = $issLines -join "`r`n"
           $issContent = $issContent -replace '{{VERSION}}', "${{ github.ref_name }}".TrimStart('v')
           Set-Content -Path installer.iss -Value $issContent -Encoding UTF8
           # Build installer
@@ -111,7 +113,6 @@ jobs:
             Write-Error "Installer was not created!"
             exit 1
           }
-        shell: powershell
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
