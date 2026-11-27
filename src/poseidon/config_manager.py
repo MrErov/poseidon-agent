@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from poseidon.exceptions import ConfigError, ConfigValidationError
+from poseidon.model_router import ModelRouting
 from poseidon.utils import get_working_dir
 
 _PHASE_IDS = {
@@ -53,7 +54,7 @@ class ConfigManager:
     _VALID_RUNTIMES = {"api", "herdr"}
     _VALID_MODES = {"persistent", "headless"}
     _VALID_LAUNCHES = {"interactive", "headless_in_terminal"}
-    _TOP_LEVEL_KEYS = {"version", "default_role", "roles", "phase_roles", "herdr"}
+    _TOP_LEVEL_KEYS = {"version", "default_role", "roles", "phase_roles", "herdr", "model_routing"}
     _ROLE_KEYS = {"executor", "model", "runtime", "agent", "name_prefix", "herdr"}
     _HERDR_DEFAULTS = {
         "executable": "hc",
@@ -101,6 +102,18 @@ class ConfigManager:
         data = self._load_and_validate()
         value = data.get("default_role")
         return value or self.DEFAULT_ROLE
+
+    def get_model_routing(self) -> ModelRouting:
+        """Return the model routing configuration."""
+        data = self._load_and_validate()
+        mr = data.get("model_routing", {})
+        # Provide defaults if not configured
+        return ModelRouting(
+            planner=mr.get("planner", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+            coder=mr.get("coder", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+            reviewer=mr.get("reviewer", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+            default=mr.get("default", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+        )
 
     def resolve(
         self,
@@ -395,5 +408,21 @@ class ConfigManager:
         herdr = data.get("herdr", {})
         if not isinstance(herdr, dict):
             raise ConfigError("The 'herdr' section must be a mapping.")
+
+        model_routing = data.get("model_routing", {})
+        if model_routing:
+            if not isinstance(model_routing, dict):
+                raise ConfigError("The 'model_routing' section must be a mapping.")
+            required_keys = {"planner", "coder", "reviewer", "default"}
+            missing = required_keys - set(model_routing)
+            if missing:
+                raise ConfigValidationError(
+                    f"'model_routing' missing required keys: {sorted(missing)}"
+                )
+            for key, value in model_routing.items():
+                if not isinstance(value, str):
+                    raise ConfigValidationError(
+                        f"'model_routing.{key}' must be a string"
+                    )
 
         return data

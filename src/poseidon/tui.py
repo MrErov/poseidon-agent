@@ -30,6 +30,7 @@ from textual.widgets import (
 from poseidon.config_manager import ConfigManager
 from poseidon.core import PhaseRunner
 from poseidon.herdr_delegator import HerdrDelegator
+from poseidon.model_router import PHASE_TO_ROLE, ModelRouter, ModelRouting
 
 _PHASES = [
     ("0", "Phase 0 — Context Bootstrap"),
@@ -198,17 +199,27 @@ class PoseidonApp(App[None]):
         self,
         runner_factory: Callable[..., Any] | None = None,
         config_resolver: Callable[[], Any] | None = None,
+        model_routing: ModelRouting | None = None,
     ) -> None:
         super().__init__()
         self.runner_factory = runner_factory
         self.config_resolver = config_resolver or (
             lambda phase: ConfigManager().resolve(phase)
         )
+        self.model_router = model_routing if model_routing is not None else ModelRouter(
+            ModelRouting(
+                planner="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                coder="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                reviewer="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                default="nvidia_nim/nemotron-3-ultra-550b-a55b",
+            )
+        )
         self.output_text = ""
         self._phase_running = False
         self._current_worker = None
         self._selected_phase = "0"
         self._cancel_event: threading.Event | None = None
+        self._updating_model_select = False
 
     @property
     def selected_phase(self) -> str:
@@ -238,6 +249,19 @@ class PoseidonApp(App[None]):
                             value="0",
                             allow_blank=False,
                             id="phase-select",
+                        )
+                    with Horizontal(classes="input-row"):
+                        yield Label("Model:", classes="input-label")
+                        yield Select(
+                            [
+                                ("Planner (Phases 0,1a,3,4)", "planner"),
+                                ("Coder (Phase 2)", "coder"),
+                                ("Reviewer (Phase 1b)", "reviewer"),
+                                ("Default", "default"),
+                            ],
+                            value="planner",
+                            allow_blank=False,
+                            id="model-select",
                         )
                     with Horizontal(classes="input-row"):
                         yield Label("Spec Path:", classes="input-label")
@@ -318,12 +342,24 @@ class PoseidonApp(App[None]):
         self.sub_title = f"Selected {self._selected_phase}"
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id != "phase-select" or not isinstance(event.value, str):
+        if event.select.id == "phase-select":
+            if not isinstance(event.value, str):
+                return
+            if event.value == self._selected_phase:
+                return
+            self._selected_phase = event.value
+            self.sub_title = f"Selected {self._selected_phase}"
+            # Auto-select model based on phase
+            role = PHASE_TO_ROLE.get(self._selected_phase, "planner")
+            model_select = self.query_one("#model-select", Select)
+            # Temporarily disconnect the model-select's on_select_changed handler
+            model_select.value = role
             return
-        if event.value == self._selected_phase:
+
+        if event.select.id != "model-select" or not isinstance(event.value, str):
             return
-        self._selected_phase = event.value
-        self.sub_title = f"Selected {self._selected_phase}"
+        # Model selection changed - don't update sub_title to avoid overriding phase selection
+        # The sub_title should reflect the selected phase, not the model
 
     def action_run_selected_phase(self) -> None:
         if self._phase_running:
@@ -332,6 +368,8 @@ class PoseidonApp(App[None]):
         phase = self._selected_phase
         spec_path = self.query_one("#spec-input", Input).value.strip() or None
         context_path = self.query_one("#context-input", Input).value.strip() or None
+        model_role = self.query_one("#model-select", Select).value
+        model_name = self.model_router.resolve(phase, model_role)
 
         self._phase_running = True
         self._cancel_event = threading.Event()
@@ -340,7 +378,7 @@ class PoseidonApp(App[None]):
         self.query_one(RichLog).clear()
         self._set_activity("running", f"Running phase {phase}...")
         self._current_worker = self.run_worker(
-            lambda: self._execute_phase(phase, spec_path, context_path),
+            lambda: self._execute_phase(phase, spec_path, context_path, model_name=model_name),
             thread=True,
             exclusive=True,
         )
@@ -363,7 +401,11 @@ class PoseidonApp(App[None]):
             self.post_message(self.PhaseComplete("Cancelled"))
 
     def _execute_phase(
-        self, phase: str, spec_path: str | None, context_path: str | None
+        self,
+        phase: str,
+        spec_path: str | None,
+        context_path: str | None,
+        model_name: str | None = None,
     ) -> None:
         try:
             execution = self.config_resolver(phase)
@@ -384,7 +426,7 @@ class PoseidonApp(App[None]):
             runner.run(
                 phase=phase,
                 spec_path=spec_path,
-                model_name=execution.model,
+                model_name=model_name,
                 context_path=context_path,
                 executor=execution.executor,
                 herdr_agent=execution.agent,
@@ -407,7 +449,12 @@ class PoseidonApp(App[None]):
     ) -> Any:
         if self.runner_factory is not None:
             return self.runner_factory(console=console, herdr_delegator=herdr)
-        return PhaseRunner(console=console, herdr_delegator=herdr)
+        # Pass model_router for multi-model orchestration
+        return PhaseRunner(
+            console=console,
+            herdr_delegator=herdr,
+            model_router=self.model_router,
+        )
 
     def on_poseidon_app_stream_text(self, message: StreamText) -> None:
         self.output_text += message.text

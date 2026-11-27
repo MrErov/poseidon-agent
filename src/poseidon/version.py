@@ -6,7 +6,7 @@ it without relying on installed package metadata.
 
 from __future__ import annotations
 
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 
 
 def get_version() -> str:

@@ -34,3 +34,9 @@ herdr:
   total_timeout_seconds: 3600
   progress_interval_seconds: 30
   phase_timeouts: {}
+
+model_routing:
+  planner: "nvidia_nim/moonshotai/kimi-k2-instruct"
+  coder: "nvidia_nim/nemotron-3-ultra-550b-a55b"
+  reviewer: "nvidia_nim/mistralai/mistral-large-4-1t-a52b"
+  default: "nvidia_nim/nemotron-3-ultra-550b-a55b"

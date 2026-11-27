@@ -1,7 +1,18 @@
 ## [Unreleased]
+
+## [4.1.0] - 2026-11-27
+### Added
+- **Multi-Model Routing**: New `ModelRouter` class with `PHASE_TO_ROLE` mapping (planner/coder/reviewer) for automatic model selection per phase.
+- **Config-driven Model Routing**: New `model_routing` section in `config.yaml` with `planner`, `coder`, `reviewer`, and `default` model assignments.
+- **TUI Model Dropdown**: Replaced free-text model input with a `Select` dropdown populated from `model_routing`; auto-selects appropriate model when phase changes.
+- **CLI Model Commands**: New `poseidon models list` and `poseidon config init` for interactive model configuration.
+- **ConfigManager.get_model_routing()**: Returns `ModelRouting` object with defaults.
+
 ### Changed
-- README: replaced the "Local Executors" table with an "Agents & Executors" reference covering all five executors (API, Claude Code, Codex, OpenCode, Herdr) and their capabilities.
-- README: added a "Power-User Commands" section documenting `doctor`, `mcp list`, `mcp sync`, and `--resume`.
+- **PhaseRunner**: Now accepts `ModelRouter` / `ModelRouting` for automatic model resolution per phase (API executor only).
+- **TUI**: Model input replaced with dropdown; auto-selects role-based model when phase changes.
+- **Core**: Model resolution only applies to `api` executor; local executors use role config or CLI `--model`.
+- **Tests**: Added `tests/test_model_router.py` with 7 tests for phase→model resolution, override, and fallback behavior.
 
 ## [4.0.0] - 2026-11-26
 ### Added

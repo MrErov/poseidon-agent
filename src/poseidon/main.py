@@ -366,7 +366,9 @@ def run_phase(
             if executor == "herdr"
             else None
         )
-        runner = PhaseRunner(herdr_delegator=herdr_delegator)
+        config_manager = ConfigManager()
+        model_routing = config_manager.get_model_routing()
+        runner = PhaseRunner(herdr_delegator=herdr_delegator, model_routing=model_routing)
         if resume is not None:
             if executor == "herdr":
                 content = herdr_delegator.resume(resume)

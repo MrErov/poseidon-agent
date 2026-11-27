@@ -28,6 +28,7 @@ from poseidon.exceptions import (
 )
 from poseidon.execution_engine import ExecutionEngine
 from poseidon.herdr_delegator import HerdrDelegator
+from poseidon.model_router import ModelRouter, ModelRouting
 from poseidon.prompt_builder import PromptBuilder
 from poseidon.spec_state_machine import SpecStateMachine
 from poseidon.types import (
@@ -50,6 +51,8 @@ class PhaseRunner:
         console: Console | None = None,
         delegator: LocalCLIDelegator | None = None,
         herdr_delegator: HerdrDelegator | None = None,
+        model_router: ModelRouter | None = None,
+        model_routing: ModelRouting | None = None,
     ) -> None:
         self.console = console or Console()
         self.state_machine = SpecStateMachine(console=self.console)
@@ -62,6 +65,19 @@ class PhaseRunner:
         # Session directory for API resume
         self._session_dir = get_working_dir() / ".poseidon" / "sessions"
         self._session_dir.mkdir(parents=True, exist_ok=True)
+        # Model routing
+        if model_router is not None:
+            self.model_router = model_router
+        elif model_routing is not None:
+            self.model_router = ModelRouter(model_routing)
+        else:
+            # Default routing
+            self.model_router = ModelRouter(ModelRouting(
+                planner="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                coder="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                reviewer="nvidia_nim/nemotron-3-ultra-550b-a55b",
+                default="nvidia_nim/nemotron-3-ultra-550b-a55b",
+            ))
 
     def _session_file_path(self, phase: str, session_id: str | None = None) -> Path:
         """Get the session file path for a phase."""
@@ -131,6 +147,11 @@ class PhaseRunner:
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
             raise InputValidationError(f"Unsupported executor: '{executor}'.")
+
+        # Resolve model from routing only for API executor; local executors use role config
+        if model_name is None and executor == "api":
+            model_name = self.model_router.resolve(phase)
+
         if executor == "api" and not (model_name and model_name.strip()):
             raise InputValidationError(
                 "The --model parameter is required when executor='api'."
