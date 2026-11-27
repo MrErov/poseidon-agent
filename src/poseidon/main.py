@@ -17,6 +17,11 @@ from poseidon.config_manager import ConfigError, ConfigManager
 from poseidon.console import configure_utf8_output
 from poseidon.core import GateError, PhaseRunner, PoseidonError
 from poseidon.herdr_delegator import HerdrDelegator
+from poseidon.mcp_manager import (
+    get_config_paths,
+    list_all_mcps,
+    sync_mcp,
+)
 from poseidon.spec_state_machine import SpecStateMachine
 from poseidon.utils import get_working_dir
 from poseidon.version import get_version
@@ -39,6 +44,93 @@ _PHASES: tuple[tuple[str, str, str], ...] = (
 )
 _SPEC_PHASES = {"1b", "2", "3", "4"}
 _WIZARD_ROLES = ("architect", "tester")
+
+
+# MCP command group
+mcp_app = typer.Typer(
+    name="mcp",
+    help="Manage MCP (Model Context Protocol) servers across agents.",
+    add_completion=False,
+)
+app.add_typer(mcp_app, name="mcp")
+
+
+@mcp_app.command("list")
+def mcp_list() -> None:
+    """List all MCP servers configured across agents."""
+    _configure_utf8_output()
+
+    mcps = list_all_mcps()
+    if not mcps:
+        Console().print("[yellow]No MCP servers found.[/yellow]")
+        return
+
+    table = Table(title="📡 MCP Registry", show_header=True, header_style="bold cyan")
+    table.add_column("Name", style="bold")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Command", style="green", max_width=40)
+    table.add_column("Args", style="yellow", max_width=50)
+    table.add_column("Status", justify="center")
+
+    for mcp in mcps:
+        args_str = " ".join(mcp.get("args", []))
+        if len(args_str) > 50:
+            args_str = args_str[:47] + "..."
+
+        status = "🔴 Disabled" if mcp.get("disabled") else "🟢 Enabled"
+        agent_display = mcp["agent"].replace("_alt", " (alt)")
+
+        table.add_row(
+            mcp["name"],
+            agent_display,
+            mcp.get("command", "")[:40],
+            args_str,
+            status,
+        )
+
+    Console().print(table)
+
+
+@mcp_app.command("sync")
+def mcp_sync(
+    mcp_name: Annotated[str, typer.Argument(help="Name of the MCP server to sync.")],
+    from_agent: Annotated[
+        str,
+        typer.Option("--from", help="Source agent (opencode, codex, claude)."),
+    ],
+    to_agent: Annotated[
+        str,
+        typer.Option("--to", help="Target agent (opencode, codex, claude)."),
+    ],
+) -> None:
+    """Sync an MCP server from one agent to another."""
+    _configure_utf8_output()
+
+    config_paths = get_config_paths()
+    valid_agents = ["opencode", "codex", "claude"]
+
+    if from_agent not in valid_agents or to_agent not in valid_agents:
+        error_console.print(
+            f"[bold red]Error:[/bold red] Invalid agent. Valid: {', '.join(valid_agents)}"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        success = sync_mcp(mcp_name, from_agent, to_agent, config_paths)
+    except ValueError as exc:
+        error_console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if success:
+        Console().print(
+            f"[green]✅[/green] Synced '[bold]{mcp_name}[/bold]' "
+            f"from [cyan]{from_agent}[/cyan] to [cyan]{to_agent}[/cyan]"
+        )
+    else:
+        error_console.print(
+            f"[bold red]Error:[/bold red] MCP '[bold]{mcp_name}[/bold]' not found in {from_agent}"
+        )
+        raise typer.Exit(code=1)
 
 
 def _configure_utf8_output() -> None:
@@ -223,7 +315,7 @@ def run_phase(
         str | None,
         typer.Option(
             "--resume",
-            help="Resume an existing Herdr terminal (for example, t19).",
+            help="Resume a previous session (Herdr terminal ID or API session file).",
         ),
     ] = None,
     interactive: Annotated[
@@ -276,14 +368,28 @@ def run_phase(
         )
         runner = PhaseRunner(herdr_delegator=herdr_delegator)
         if resume is not None:
-            if executor != "herdr":
+            if executor == "herdr":
+                content = herdr_delegator.resume(resume)
+                runner.console.print(Markdown(content))
+                return
+            elif executor == "api":
+                # API session resume - delegate to PhaseRunner with session file
+                runner.run(
+                    phase=phase,
+                    spec_path=spec,
+                    model_name=model,
+                    context_path=context,
+                    executor=executor,
+                    herdr_agent=selected_herdr_agent,
+                    resume_session=resume,
+                )
+                return
+            else:
                 error_console.print(
-                    "[bold red]Error:[/bold red] [red]--resume requires --executor herdr.[/red]"
+                    "[bold red]Error:[/bold red] "
+                    "[red]--resume only supported for herdr and api executors.[/red]"
                 )
                 raise typer.Exit(code=1)
-            content = herdr_delegator.resume(resume)
-            runner.console.print(Markdown(content))
-            return
         runner.run(
             phase=phase,
             spec_path=spec,

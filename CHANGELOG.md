@@ -1,14 +1,14 @@
-## [3.8.0] - 2026-11-26
+## [3.9.0] - 2026-11-26
 ### Added
-- **`poseidon doctor`**: new CLI command that checks environment health (`.meta-skills/`, `config.yaml`, `hc` in PATH, API keys) and reports readiness with a colored Rich table.
-- **Structured JSONL logging**: set `POSEIDON_LOG_JSON=1` to emit `phase_start`, `llm_call`, `llm_response`, `phase_end`, `error` events to `.poseidon/poseidon.log.jsonl` for production debugging.
-- **Optional `litellm` dependency**: moved to `[api]` extra (`pip install poseidon-agent[api]`); friendly error if missing when using `--executor api`.
-- **5-Minute Quickstart** in README for zero-friction onboarding.
+- **MCP Registry Manager** (`poseidon mcp`): `list` command scans OpenCode, Codex, and Claude Code configs; `sync` command copies MCP servers between agents with safe JSON/TOML merging.
+- **API Session Resume**: `--resume` now works with `api` executor; Hot Memory (message history) persisted to `.poseidon/sessions/` and auto-resumed on failure/timeout.
+- **Release Pipeline**: GitHub Actions workflow builds Windows (Inno Setup `.exe` installer), Linux, and macOS binaries; optional `cosign` signing; artifacts attached to GitHub Release.
 
 ### Changed
-- `pyproject.toml`: `litellm` moved to optional dependency; core deps now ~70 MB lighter without API extra.
+- `run` command: `--resume` now accepts API session files in addition to Herdr terminal IDs.
+- Core deps: `litellm` remains optional `[api]` extra; session persistence added to `PhaseRunner`.
 
-## [3.7.1] - 2026-11-26
+## [3.8.0] - 2026-11-26
 ### Added
 - **Responsive TUI:** breakpoints collapse the phase sidebar into a selector on narrow terminals and show a minimum-size notice when the terminal is too small.
 - **Theme-aware styling:** the Textual UI uses design tokens (`$primary`, `$surface`, `$panel`, `$accent`, `$success`, `$warning`, `$error`) instead of hardcoded colors, so light and dark themes stay readable.

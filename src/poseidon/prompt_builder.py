@@ -29,8 +29,13 @@ class PromptBuilder:
         artifact_path: Path | None = None,
         preserve_spec_state: bool = False,
         phase_kind: str | None = None,
+        resumed_messages: list[dict[str, str]] | None = None,
     ) -> list[dict[str, str]]:
-        """Create a fresh message list; never reuse prior history."""
+        """Create a message list, optionally resuming from prior history.
+
+        Args:
+            resumed_messages: Optional prior message history to prepend (for API resume).
+        """
         if spec_path is None:
             intro = (
                 f"Run phase '{phase}'.\n\n"
@@ -92,10 +97,18 @@ class PromptBuilder:
 
         user_content = "\n\n".join([intro, *blocks])
 
-        return [
+        messages = [
             {"role": "system", "content": cold_memory},
             {"role": "user", "content": user_content},
         ]
+
+        # Prepend resumed history if provided (for API resume)
+        if resumed_messages:
+            # Skip the system message from resumed history to avoid duplication
+            resumed_filtered = [m for m in resumed_messages if m.get("role") != "system"]
+            messages = resumed_filtered + messages
+
+        return messages
 
     @staticmethod
     def format_for_cli(messages: list[dict[str, str]]) -> str:

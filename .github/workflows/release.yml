@@ -1,0 +1,274 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v3.9.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'uv'
+
+      - name: Install uv
+        run: |
+          powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+          echo "$env:LOCALAPPDATA\uv\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Sync dependencies
+        run: uv sync --extra binary
+
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller --clean --noconfirm build.spec
+
+      - name: Create Inno Setup installer
+        run: |
+          # Install Inno Setup
+          choco install innosetup -y --no-progress
+          # Create installer script
+          cat > installer.iss << 'EOF'
+          [Setup]
+          AppName=Poseidon Agent
+          AppVersion={{VERSION}}
+          DefaultDirName={autopf}\Poseidon Agent
+          DefaultGroupName=Poseidon Agent
+          OutputDir=dist
+          OutputBaseFilename=poseidon-agent-setup
+          Compression=lzma
+          SolidCompression=yes
+          WizardStyle=modern
+          ArchitecturesInstallIn64BitMode=x64
+
+          [Files]
+          Source: "dist\poseidon.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+          [Icons]
+          Name: "{group}\Poseidon Agent"; Filename: "{app}\poseidon.exe"
+          Name: "{commondesktop}\Poseidon Agent"; Filename: "{app}\poseidon.exe"
+
+          [Run]
+          Filename: "{app}\poseidon.exe"; Parameters: "--version"; Description: "Verify installation"; Flags: nowait postinstall skipifsilent
+          EOF
+          # Replace version placeholder
+          $version = "${{ github.ref_name }}"
+          $version = $version.TrimStart('v')
+          (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
+          # Build installer
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: poseidon-windows-installer
+          path: dist/poseidon-agent-setup.exe
+          retention-days: 30
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: poseidon-windows-binary
+          path: dist/poseidon.exe
+          retention-days: 30
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'uv'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential \
+            libssl-dev \
+            libffi-dev \
+            python3-dev \
+            upx-ucl
+
+      - name: Sync dependencies
+        run: uv sync --extra binary
+
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller --clean --noconfirm build.spec
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: poseidon-linux-binary
+          path: dist/poseidon
+          retention-days: 30
+
+  build-macos:
+    name: Build macOS Binary
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'uv'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Sync dependencies
+        run: uv sync --extra binary
+
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller --clean --noconfirm build.spec
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: poseidon-macos-binary
+          path: dist/poseidon
+          retention-days: 30
+
+  release:
+    name: Create GitHub Release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog for this version from CHANGELOG.md
+          version="${{ github.ref_name }}"
+          version="${version#v}"
+          awk -v ver="$version" '
+            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1 }
+            found { print }
+          ' CHANGELOG.md > release_notes.md || echo "No changelog found" > release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Poseidon ${{ github.ref_name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/poseidon.exe
+            dist/poseidon
+            dist/poseidon-agent-setup.exe
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cosign Sign (if COSIGN_PRIVATE_KEY available)
+        if: env.COSIGN_PRIVATE_KEY != ''
+        run: |
+          # Install cosign
+          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+          sudo chmod +x /usr/local/bin/cosign
+
+          # Sign binaries
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon.exe.sig dist/poseidon.exe
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon.sig dist/poseidon
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon-agent-setup.exe.sig dist/poseidon-agent-setup.exe
+
+      - name: Upload signatures
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: signatures
+          path: dist/*.sig
+          retention-days: 30
+
+  # Optional: Code signing with certificate (requires Apple Developer ID / Windows EV cert)
+  # This is a placeholder for when you have proper certificates
+  codesign-windows:
+    name: Code Sign Windows (Placeholder)
+    needs: build-windows
+    runs-on: windows-latest
+    if: false  # Set to true when you have a code signing certificate
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: poseidon-windows-binary
+          path: dist
+
+      - name: Sign with signtool (requires certificate)
+        run: |
+          # This requires a valid code signing certificate
+          # signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a dist/poseidon.exe
+          echo "Code signing not configured. Add certificate to enable."
+
+  codesign-macos:
+    name: Code Sign macOS (Placeholder)
+    needs: build-macos
+    runs-on: macos-latest
+    if: false  # Set to true when you have Apple Developer ID
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: poseidon-macos-binary
+          path: dist
+
+      - name: Sign with codesign (requires Apple Developer ID)
+        run: |
+          # codesign --force --options runtime --sign "Developer ID Application: Your Name" dist/poseidon
+          echo "Code signing not configured. Add Apple Developer ID to enable."

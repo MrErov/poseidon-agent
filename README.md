@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v3.8.0-blue.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v3.9.0-blue.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-191%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-194%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -338,6 +338,7 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v3.9.0** — MCP Registry Manager (`poseidon mcp list|sync`), API Session Resume, Release Pipeline (Inno Setup + cosign).
 - **v3.8.0** — `poseidon doctor`, structured JSONL logging, optional `litellm` dependency, Quickstart docs.
 - **v3.7.1** - Frozen binary support, cooperative cancellation, Herdr terminal cleanup, PyInstaller hardening.
 - **v3.7.0** - Responsive TUI, theme tokens, live spinner, and PyInstaller builds.

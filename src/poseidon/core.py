@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
+import time
 from pathlib import Path
+from typing import Any
 
 # litellm is now an optional dependency (api extra). Re-export for backward compatibility.
 try:
@@ -56,6 +59,57 @@ class PhaseRunner:
         )
         # Backward compatibility: expose delegator directly
         self.delegator = self.execution_engine.delegator
+        # Session directory for API resume
+        self._session_dir = get_working_dir() / ".poseidon" / "sessions"
+        self._session_dir.mkdir(parents=True, exist_ok=True)
+
+    def _session_file_path(self, phase: str, session_id: str | None = None) -> Path:
+        """Get the session file path for a phase."""
+        if session_id:
+            return self._session_dir / f"session_{phase}_{session_id}.json"
+        # Auto-find latest session for phase
+        pattern = f"session_{phase}_*.json"
+        sessions = sorted(
+            self._session_dir.glob(pattern),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if sessions:
+            return sessions[0]
+        return self._session_dir / f"session_{phase}_{int(time.time())}.json"
+
+    def _save_session(
+        self,
+        phase: str,
+        messages: list[dict[str, str]],
+        spec_path: str | None,
+        context_path: str | None,
+        model_name: str | None,
+        executor: str,
+    ) -> Path:
+        """Save session state for potential resume."""
+        session_data = {
+            "phase": phase,
+            "messages": messages,
+            "spec_path": spec_path,
+            "context_path": context_path,
+            "model_name": model_name,
+            "executor": executor,
+            "timestamp": time.time(),
+        }
+        session_file = self._session_file_path(phase)
+        try:
+            session_file.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+        except OSError:
+            pass  # Best effort
+        return session_file
+
+    def _load_session(self, session_file: Path) -> dict[str, Any] | None:
+        """Load session state from file."""
+        try:
+            return json.loads(session_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
 
     def run(
         self,
@@ -66,11 +120,13 @@ class PhaseRunner:
         executor: str = "api",
         herdr_agent: str | None = None,
         cancel_event: threading.Event | None = None,
+        resume_session: str | None = None,
     ) -> str:
         """Validate and run a phase, saving its artifact when applicable.
 
         Args:
             cancel_event: Optional threading.Event to signal cooperative cancellation.
+            resume_session: Optional session file path to resume from.
         """
         executor = executor.strip().lower()
         if executor != "api" and executor not in _LOCAL_EXECUTORS | {"herdr"}:
@@ -132,6 +188,23 @@ class PhaseRunner:
             if executor == "herdr"
             else None
         )
+
+        # Handle session resume
+        resumed_messages = None
+        if resume_session and executor == "api":
+            session_file = self._session_dir / resume_session
+            if not session_file.is_file():
+                # Try to find by phase
+                session_file = self._session_file_path(phase, resume_session)
+            session_data = self._load_session(session_file)
+            if session_data:
+                resumed_messages = session_data.get("messages")
+                self.console.print(f"[cyan]📂 Resumed session from {session_file.name}[/cyan]")
+            else:
+                self.console.print(
+                    f"[yellow]⚠️ Session file not found or invalid: {resume_session}[/yellow]"
+                )
+
         messages = self.prompt_builder.build_messages(
             phase=phase,
             spec_path=spec_file,
@@ -142,6 +215,7 @@ class PhaseRunner:
             artifact_path=artifact_path,
             preserve_spec_state=phase_kind == "tdd",
             phase_kind=phase_kind,
+            resumed_messages=resumed_messages,
         )
 
         log_event(
@@ -173,6 +247,17 @@ class PhaseRunner:
             raise
 
         log_event("llm_response", phase=phase, executor=executor, response_length=len(content))
+
+        # Save session for API executor (for potential resume)
+        if executor == "api":
+            self._save_session(
+                phase=phase,
+                messages=messages,
+                spec_path=spec_path,
+                context_path=context_path,
+                model_name=model_name,
+                executor=executor,
+            )
 
         self.console.print(Markdown(content))
 
