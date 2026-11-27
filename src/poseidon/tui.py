@@ -30,7 +30,12 @@ from textual.widgets import (
 from poseidon.config_manager import ConfigManager
 from poseidon.core import PhaseRunner
 from poseidon.herdr_delegator import HerdrDelegator
-from poseidon.model_router import PHASE_TO_ROLE, ModelRouter, ModelRouting
+from poseidon.model_router import (
+    DEFAULT_MODEL_ROUTING,
+    PHASE_TO_ROLE,
+    ModelRouter,
+    ModelRouting,
+)
 
 _PHASES = [
     ("0", "Phase 0 — Context Bootstrap"),
@@ -206,20 +211,12 @@ class PoseidonApp(App[None]):
         self.config_resolver = config_resolver or (
             lambda phase: ConfigManager().resolve(phase)
         )
-        self.model_router = model_routing if model_routing is not None else ModelRouter(
-            ModelRouting(
-                planner="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                coder="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                reviewer="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                default="nvidia_nim/nemotron-3-ultra-550b-a55b",
-            )
-        )
+        self.model_router = ModelRouter(model_routing or DEFAULT_MODEL_ROUTING)
         self.output_text = ""
         self._phase_running = False
         self._current_worker = None
         self._selected_phase = "0"
         self._cancel_event: threading.Event | None = None
-        self._updating_model_select = False
 
     @property
     def selected_phase(self) -> str:
@@ -342,24 +339,17 @@ class PoseidonApp(App[None]):
         self.sub_title = f"Selected {self._selected_phase}"
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "phase-select":
-            if not isinstance(event.value, str):
-                return
-            if event.value == self._selected_phase:
-                return
-            self._selected_phase = event.value
-            self.sub_title = f"Selected {self._selected_phase}"
-            # Auto-select model based on phase
-            role = PHASE_TO_ROLE.get(self._selected_phase, "planner")
-            model_select = self.query_one("#model-select", Select)
-            # Temporarily disconnect the model-select's on_select_changed handler
-            model_select.value = role
+        if event.select.id != "phase-select":
             return
-
-        if event.select.id != "model-select" or not isinstance(event.value, str):
+        if not isinstance(event.value, str):
             return
-        # Model selection changed - don't update sub_title to avoid overriding phase selection
-        # The sub_title should reflect the selected phase, not the model
+        if event.value == self._selected_phase:
+            return
+        self._selected_phase = event.value
+        self.sub_title = f"Selected {self._selected_phase}"
+        # Auto-select the model role that belongs to the phase.
+        role = PHASE_TO_ROLE.get(self._selected_phase, "planner")
+        self.query_one("#model-select", Select).value = role
 
     def action_run_selected_phase(self) -> None:
         if self._phase_running:
@@ -369,7 +359,7 @@ class PoseidonApp(App[None]):
         spec_path = self.query_one("#spec-input", Input).value.strip() or None
         context_path = self.query_one("#context-input", Input).value.strip() or None
         model_role = self.query_one("#model-select", Select).value
-        model_name = self.model_router.resolve(phase, model_role)
+        model_name = self.model_router.resolve_role(str(model_role))
 
         self._phase_running = True
         self._cancel_event = threading.Event()

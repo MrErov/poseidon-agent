@@ -105,5 +105,39 @@ def test_model_router_fallback_to_default() -> None:
     assert router.resolve("unknown") == "planner-model"
 
 
+def test_model_router_resolves_phase_aliases() -> None:
+    """Test that human-friendly phase aliases use the same role mapping."""
+    routing = ModelRouting(
+        planner="planner-model",
+        coder="coder-model",
+        reviewer="reviewer-model",
+        default="default-model",
+    )
+    router = ModelRouter(routing)
+
+    assert router.resolve("goldfish") == "reviewer-model"
+    assert router.resolve("tdd") == "coder-model"
+    assert router.resolve("drift") == "planner-model"
+    assert router.resolve("  GOLDFISH  ") == "reviewer-model"
+
+
+def test_model_router_resolve_role() -> None:
+    """Test direct role resolution for TUI model selection."""
+    routing = ModelRouting(
+        planner="planner-model",
+        coder="coder-model",
+        reviewer="reviewer-model",
+        default="default-model",
+    )
+    router = ModelRouter(routing)
+
+    assert router.resolve_role("planner") == "planner-model"
+    assert router.resolve_role("coder") == "coder-model"
+    assert router.resolve_role("reviewer") == "reviewer-model"
+    assert router.resolve_role("default") == "default-model"
+    assert router.resolve_role("unknown") == "default-model"
+    assert router.resolve_role("") == "default-model"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

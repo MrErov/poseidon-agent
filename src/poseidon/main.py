@@ -3,7 +3,7 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import questionary
 import typer
@@ -13,7 +13,12 @@ from rich.markdown import Markdown
 from rich.markup import escape
 from rich.table import Table
 
-from poseidon.config_manager import ConfigError, ConfigManager
+from poseidon.config_manager import (
+    ConfigError,
+    ConfigManager,
+    create_default_config,
+    save_config,
+)
 from poseidon.console import configure_utf8_output
 from poseidon.core import GateError, PhaseRunner, PoseidonError
 from poseidon.herdr_delegator import HerdrDelegator
@@ -45,6 +50,16 @@ _PHASES: tuple[tuple[str, str, str], ...] = (
 _SPEC_PHASES = {"1b", "2", "3", "4"}
 _WIZARD_ROLES = ("architect", "tester")
 
+_MODEL_SUGGESTIONS: tuple[tuple[str, str], ...] = (
+    ("Kimi K2 Instruct (NVIDIA NIM)", "nvidia_nim/moonshotai/kimi-k2-instruct"),
+    ("Nemotron 3 Ultra (NVIDIA NIM)", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+    (
+        "Mistral Large (NVIDIA NIM)",
+        "nvidia_nim/mistralai/mistral-large-4-1t-a52b",
+    ),
+)
+_CUSTOM_MODEL = "__custom__"
+
 
 # MCP command group
 mcp_app = typer.Typer(
@@ -53,6 +68,22 @@ mcp_app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(mcp_app, name="mcp")
+
+# Config command group
+config_app = typer.Typer(
+    name="config",
+    help="Manage Poseidon configuration.",
+    add_completion=False,
+)
+app.add_typer(config_app, name="config")
+
+# Models command group
+models_app = typer.Typer(
+    name="models",
+    help="Inspect the configured model routing.",
+    add_completion=False,
+)
+app.add_typer(models_app, name="models")
 
 
 @mcp_app.command("list")
@@ -133,6 +164,129 @@ def mcp_sync(
         raise typer.Exit(code=1)
 
 
+@config_app.command("init")
+def config_init(
+    path: Annotated[
+        Path | None,
+        typer.Option(
+            "--path",
+            help="Where to write config.yaml (default: current directory).",
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite an existing config.yaml without asking.",
+        ),
+    ] = False,
+) -> None:
+    """Create config.yaml through an interactive model-routing wizard."""
+    _configure_utf8_output()
+    target = Path(path) if path is not None else get_working_dir() / "config.yaml"
+
+    existing: dict[str, Any] = {}
+    if target.is_file():
+        try:
+            existing = ConfigManager(target).load()
+        except ConfigError as exc:
+            error_console.print(
+                f"[bold red]Configuration error:[/bold red] {escape(str(exc))}"
+            )
+            raise typer.Exit(code=1) from None
+        if not force:
+            overwrite = _ask_question(
+                questionary.confirm(
+                    f"{_display_path(target)} already exists. Overwrite?",
+                    default=True,
+                )
+            )
+            if not overwrite:
+                Console().print("[yellow]Cancelled.[/yellow]")
+                return
+
+    routing = ConfigManager(target).get_model_routing()
+    console = Console()
+    console.print("[bold cyan]🔱 Poseidon configuration wizard[/bold cyan]")
+    console.print(f"Writing to [bold]{_display_path(target)}[/bold]\n")
+
+    planner = _prompt_model("Planner (phases 0, 1a, 3, 4)", routing.planner)
+    coder = _prompt_model("Coder (phase 2)", routing.coder)
+    reviewer = _prompt_model("Reviewer (phase 1b)", routing.reviewer)
+
+    config = create_default_config(existing)
+    configured_default = (existing.get("model_routing") or {}).get("default")
+    config["model_routing"] = {
+        "planner": planner,
+        "coder": coder,
+        "reviewer": reviewer,
+        "default": configured_default or coder,
+    }
+
+    try:
+        saved = save_config(config, target)
+    except OSError as exc:
+        error_console.print(
+            f"[bold red]Error:[/bold red] Could not write {target}: {escape(str(exc))}"
+        )
+        raise typer.Exit(code=1) from None
+
+    console.print()
+    table = Table(show_header=True, header_style="bold cyan", box=None)
+    table.add_column("Role", style="bold")
+    table.add_column("Model", style="green")
+    table.add_row("planner", planner)
+    table.add_row("coder", coder)
+    table.add_row("reviewer", reviewer)
+    table.add_row("default", config["model_routing"]["default"])
+    console.print(table)
+    console.print(
+        f"\n[green]✅ config.yaml created successfully at "
+        f"{_display_path(saved)}![/green]"
+    )
+    console.print("Run [bold]poseidon doctor[/bold] to verify your setup.")
+
+
+@models_app.command("list")
+def models_list() -> None:
+    """Show which model is assigned to each orchestration role."""
+    _configure_utf8_output()
+
+    try:
+        manager = ConfigManager()
+        routing = manager.get_model_routing()
+    except ConfigError as exc:
+        error_console.print(
+            f"[bold red]Configuration error:[/bold red] {escape(str(exc))}"
+        )
+        raise typer.Exit(code=1) from None
+
+    table = Table(
+        title="🔱 Poseidon Model Routing",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Role", style="bold cyan", no_wrap=True)
+    table.add_column("Model", style="green")
+    table.add_column("Phases", style="yellow", no_wrap=True)
+
+    table.add_row("planner", routing.planner, "0, 1a, 3, 4")
+    table.add_row("coder", routing.coder, "2")
+    table.add_row("reviewer", routing.reviewer, "1b")
+    table.add_row("default", routing.default, "fallback")
+
+    console = Console()
+    console.print(table)
+
+    if manager.config_path.is_file():
+        console.print(f"[dim]Source: {_display_path(manager.config_path)}[/dim]")
+    else:
+        console.print(
+            "[dim]No config.yaml found; showing built-in defaults. "
+            "Run `poseidon config init` to customize.[/dim]"
+        )
+
+
 def _configure_utf8_output() -> None:
     """Avoid Unicode failures on legacy Windows consoles."""
     configure_utf8_output()
@@ -181,6 +335,42 @@ def _ask_question(question) -> object:
         error_console.print("[yellow]Cancelled.[/yellow]")
         raise typer.Exit(code=1)
     return answer
+
+
+def _prompt_model(role_label: str, current: str) -> str:
+    """Ask for a model, offering NVIDIA NIM suggestions plus free-text entry."""
+    choices = [
+        questionary.Choice(title=label, value=value)
+        for label, value in _MODEL_SUGGESTIONS
+    ]
+    suggested_values = {value for _, value in _MODEL_SUGGESTIONS}
+    if current and current not in suggested_values:
+        choices.insert(0, questionary.Choice(f"{current} (current)", value=current))
+    choices.append(questionary.Choice("Custom model...", value=_CUSTOM_MODEL))
+
+    selected = str(
+        _ask_question(
+            questionary.select(
+                f"{role_label} model:",
+                choices=choices,
+                default=current or None,
+            )
+        )
+    )
+    if selected != _CUSTOM_MODEL:
+        return selected
+
+    custom = str(
+        _ask_question(
+            questionary.text("Model identifier:", default=current)
+        )
+    ).strip()
+    if not custom:
+        error_console.print(
+            "[bold red]Error:[/bold red] [red]A model identifier is required.[/red]"
+        )
+        raise typer.Exit(code=1)
+    return custom
 
 
 def _wizard_defaults(
@@ -353,12 +543,6 @@ def run_phase(
     executor = execution.executor
     model = execution.model
     selected_herdr_agent = herdr_agent or execution.agent
-    if executor == "api" and not (model and model.strip()):
-        error_console.print(
-            "[bold red]Error:[/bold red] "
-            "[red]--model is required when --executor=api.[/red]"
-        )
-        raise typer.Exit(code=1)
 
     try:
         herdr_delegator = (
@@ -454,7 +638,15 @@ def tui_command() -> None:
     """Launch the interactive Textual interface."""
     from poseidon.tui import PoseidonApp
 
-    PoseidonApp().run()
+    try:
+        routing = ConfigManager().get_model_routing()
+    except ConfigError as exc:
+        error_console.print(
+            f"[bold red]Configuration error:[/bold red] {escape(str(exc))}"
+        )
+        raise typer.Exit(code=1) from None
+
+    PoseidonApp(model_routing=routing).run()
 
 
 @app.command("doctor")

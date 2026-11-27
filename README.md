@@ -4,7 +4,7 @@
   <p><strong>The guided autonomous runtime for Keel Nav.</strong> A local-first AI agent with 3-layer cognitive memory.</p>
   <p>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
-      <img alt="Version" src="https://img.shields.io/badge/version-v4.1.0-gold.svg" />
+      <img alt="Version" src="https://img.shields.io/badge/version-v4.1.1-gold.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/actions/workflows/ci.yml">
       <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/MrErov/poseidon-agent/ci.yml?branch=main" />
@@ -13,7 +13,7 @@
       <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/tree/main/tests">
-      <img alt="Tests" src="https://img.shields.io/badge/tests-214%20passing-brightgreen.svg" />
+      <img alt="Tests" src="https://img.shields.io/badge/tests-213%20passing-brightgreen.svg" />
     </a>
     <a href="https://github.com/MrErov/poseidon-agent/releases/latest">
       <img alt="Release" src="https://img.shields.io/github/v/release/MrErov/poseidon-agent?include_prereleases&sort=semver" />
@@ -42,24 +42,22 @@ uv tool install poseidon-agent
 # 2. Navigate to your project (must have .meta-skills/ with phase templates)
 cd my-project
 
-# 3. Optional: create config.yaml for custom roles/executors
-cat > config.yaml <<'EOF'
-version: 2
-default_role: tester
-roles:
-  tester:
-    executor: api
-    model: nvidia_nim/nemotron-3-ultra
-EOF
+# 3. Create config.yaml with the interactive wizard
+poseidon config init
+# Choose planner, coder, and reviewer models:
+# NVIDIA NIM suggestions (Kimi, Nemotron, Mistral) or a custom identifier
 
-# 4. Run the interactive wizard
+# 4. Verify your environment
+poseidon doctor
+
+# 5. Run the interactive wizard
 poseidon run -i
 # Follow prompts: select phase → spec → role → watch it execute
 
 # That's it! Check generated artifacts in specs/
 ```
 
-**No config?** Poseidon works with smart defaults: `uv tool install poseidon-agent` → `cd your-project` → `poseidon run -i`.
+**No config?** Poseidon ships with built-in NVIDIA NIM defaults: `uv tool install poseidon-agent` → `cd your-project` → `poseidon run -i`. Run `poseidon models list` to see the active phase → model routing.
 
 ---
 
@@ -199,6 +197,12 @@ poseidon run --phase 1b
 ```bash
 # Environment health: .meta-skills, config.yaml, hc in PATH, API keys
 poseidon doctor
+
+# Model routing: see which model handles each phase
+poseidon models list
+
+# Reconfigure planner/coder/reviewer models interactively
+poseidon config init
 
 # MCP registry: see every MCP server across your agents
 poseidon mcp list
@@ -368,6 +372,8 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 
 ## Changelog Highlights
 
+- **v4.1.1 (Plug & Play)** — `poseidon config init` wizard, `poseidon models list`, and out-of-the-box phase-based model routing for the API executor.
+- **v4.1.0** — Multi-Model Routing: `ModelRouter`, `model_routing` in `config.yaml`, and the TUI model dropdown.
 - **v4.0.0 (Golden Master)** — Production-ready release: Responsive TUI with design tokens, Herdr delegation with terminal management, MCP Registry Manager (`mcp list|sync`), API Session Resume, `poseidon doctor`, JSONL logging, optional `litellm`, Release Pipeline (Inno Setup, cosign), 214 tests.
 - **v3.9.0** — MCP Registry Manager (`poseidon mcp list|sync`), API Session Resume, Release Pipeline (Inno Setup + cosign).
 - **v3.8.0** — `poseidon doctor`, structured JSONL logging, optional `litellm` dependency, Quickstart docs.

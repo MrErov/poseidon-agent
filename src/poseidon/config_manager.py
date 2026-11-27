@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,30 +13,12 @@ from typing import Any
 import yaml
 
 from poseidon.exceptions import ConfigError, ConfigValidationError
-from poseidon.model_router import ModelRouting
+from poseidon.model_router import (
+    DEFAULT_MODEL_ROUTING,
+    PHASE_ALIASES,
+    ModelRouting,
+)
 from poseidon.utils import get_working_dir
-
-_PHASE_IDS = {
-    "0": "0",
-    "00": "0",
-    "context": "0",
-    "00-context-bootstrap": "0",
-    "1a": "1a",
-    "spec": "1a",
-    "01-sdd-spec-writer": "1a",
-    "1b": "1b",
-    "goldfish": "1b",
-    "02-egm-goldfish-audit": "1b",
-    "2": "2",
-    "tdd": "2",
-    "03-tdd-cycle": "2",
-    "3": "3",
-    "odd": "3",
-    "04-odd-vertical-slice": "3",
-    "4": "4",
-    "drift": "4",
-    "05-drift-control": "4",
-}
 
 
 @dataclass(frozen=True)
@@ -106,14 +92,17 @@ class ConfigManager:
     def get_model_routing(self) -> ModelRouting:
         """Return the model routing configuration."""
         data = self._load_and_validate()
-        mr = data.get("model_routing", {})
-        # Provide defaults if not configured
+        mr = data.get("model_routing", {}) or {}
         return ModelRouting(
-            planner=mr.get("planner", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
-            coder=mr.get("coder", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
-            reviewer=mr.get("reviewer", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
-            default=mr.get("default", "nvidia_nim/nemotron-3-ultra-550b-a55b"),
+            planner=mr.get("planner") or DEFAULT_MODEL_ROUTING.planner,
+            coder=mr.get("coder") or DEFAULT_MODEL_ROUTING.coder,
+            reviewer=mr.get("reviewer") or DEFAULT_MODEL_ROUTING.reviewer,
+            default=mr.get("default") or DEFAULT_MODEL_ROUTING.default,
         )
+
+    def load(self) -> dict[str, Any]:
+        """Return validated configuration data, or an empty mapping if absent."""
+        return self._load_and_validate()
 
     def resolve(
         self,
@@ -129,7 +118,7 @@ class ConfigManager:
             str(key).lower(): value for key, value in (data.get("phase_roles", {}) or {}).items()
         }
         normalized_phase = phase.strip().lower()
-        phase_id = _PHASE_IDS.get(normalized_phase, normalized_phase)
+        phase_id = PHASE_ALIASES.get(normalized_phase, normalized_phase)
         selected_role = role or phase_roles.get(phase_id)
         if selected_role is None:
             default_role = data.get("default_role") or self.DEFAULT_ROLE
@@ -426,3 +415,82 @@ class ConfigManager:
                     )
 
         return data
+
+
+_DEFAULT_PHASE_ROLES = {
+    0: "architect",
+    "1a": "architect",
+    "1b": "tester",
+    2: "tester",
+    3: "tester",
+    4: "architect",
+}
+
+
+def create_default_config(
+    existing: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a complete, valid config mapping seeded from ``existing`` values."""
+    source = dict(existing or {})
+    routing = source.get("model_routing") or {}
+
+    roles = source.get("roles")
+    if not roles:
+        # Leave role models unset so ModelRouter selects the model per phase.
+        roles = {
+            "architect": {"executor": "api"},
+            "tester": {"executor": "api"},
+        }
+
+    default_role = source.get("default_role") or ConfigManager.DEFAULT_ROLE
+    if default_role not in roles:
+        default_role = next(iter(roles), ConfigManager.DEFAULT_ROLE)
+
+    herdr = deepcopy(ConfigManager._HERDR_DEFAULTS)
+    herdr.update(source.get("herdr") or {})
+
+    return {
+        "version": source.get("version", 2),
+        "default_role": default_role,
+        "roles": roles,
+        "phase_roles": source.get("phase_roles") or dict(_DEFAULT_PHASE_ROLES),
+        "herdr": herdr,
+        "model_routing": {
+            "planner": routing.get("planner") or DEFAULT_MODEL_ROUTING.planner,
+            "coder": routing.get("coder") or DEFAULT_MODEL_ROUTING.coder,
+            "reviewer": routing.get("reviewer") or DEFAULT_MODEL_ROUTING.reviewer,
+            "default": routing.get("default") or DEFAULT_MODEL_ROUTING.default,
+        },
+    }
+
+
+def save_config(
+    config: Mapping[str, Any],
+    path: str | Path | None = None,
+) -> Path:
+    """Write ``config`` to ``path`` atomically and return the target path."""
+    target = Path(path) if path is not None else get_working_dir() / "config.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = yaml.safe_dump(
+        dict(config),
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=target.parent,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("# Poseidon configuration\n")
+            handle.write("# Generated by `poseidon config init`.\n")
+            handle.write(payload)
+        os.replace(temp_name, target)
+    except OSError:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
+
+    return target

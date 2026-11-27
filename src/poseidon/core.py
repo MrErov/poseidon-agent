@@ -28,7 +28,7 @@ from poseidon.exceptions import (
 )
 from poseidon.execution_engine import ExecutionEngine
 from poseidon.herdr_delegator import HerdrDelegator
-from poseidon.model_router import ModelRouter, ModelRouting
+from poseidon.model_router import DEFAULT_MODEL_ROUTING, ModelRouter, ModelRouting
 from poseidon.prompt_builder import PromptBuilder
 from poseidon.spec_state_machine import SpecStateMachine
 from poseidon.types import (
@@ -71,13 +71,7 @@ class PhaseRunner:
         elif model_routing is not None:
             self.model_router = ModelRouter(model_routing)
         else:
-            # Default routing
-            self.model_router = ModelRouter(ModelRouting(
-                planner="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                coder="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                reviewer="nvidia_nim/nemotron-3-ultra-550b-a55b",
-                default="nvidia_nim/nemotron-3-ultra-550b-a55b",
-            ))
+            self.model_router = ModelRouter(DEFAULT_MODEL_ROUTING)
 
     def _session_file_path(self, phase: str, session_id: str | None = None) -> Path:
         """Get the session file path for a phase."""

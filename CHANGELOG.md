@@ -1,11 +1,24 @@
 ## [Unreleased]
 
+## [4.1.1] - 2026-11-27
+### Added
+- **`poseidon config init`**: Interactive wizard that creates a complete `config.yaml` with `roles`, `phase_roles`, `herdr`, and `model_routing`. Offers NVIDIA NIM suggestions (Kimi K2, Nemotron 3 Ultra, Mistral Large) plus free-text custom model identifiers.
+- **`poseidon models list`**: Rich table showing the model assigned to each orchestration role (`planner`, `coder`, `reviewer`, `default`) and the phases it covers. Reads local configuration only; no network calls.
+- **Config Helpers**: `create_default_config()` and `save_config()` in `config_manager.py`; `save_config()` writes atomically and seeds defaults from an existing configuration.
+- **`ConfigManager.load()`**: Public accessor for validated configuration data.
+
+### Changed
+- **CLI Model Routing**: `poseidon run` now uses `model_routing` when no explicit `--model` is provided, so a fresh installation works without hand-writing YAML.
+- **Phase Aliases**: `ModelRouter` now resolves aliases such as `goldfish`, `tdd`, and `drift` through the shared `PHASE_ALIASES` map.
+- **TUI**: Fixed model resolution to use the selected role (`resolve_role`) instead of forwarding the role name as a model.
+- **README**: Quickstart now starts with `poseidon config init` and `poseidon doctor`; added model-routing commands to the Power-User section.
+- **Tests**: Added 11 tests covering the wizard, `models list`, defaults, custom models, cancellation, invalid configs, phase aliases, and role resolution.
+
 ## [4.1.0] - 2026-11-27
 ### Added
 - **Multi-Model Routing**: New `ModelRouter` class with `PHASE_TO_ROLE` mapping (planner/coder/reviewer) for automatic model selection per phase.
 - **Config-driven Model Routing**: New `model_routing` section in `config.yaml` with `planner`, `coder`, `reviewer`, and `default` model assignments.
 - **TUI Model Dropdown**: Replaced free-text model input with a `Select` dropdown populated from `model_routing`; auto-selects appropriate model when phase changes.
-- **CLI Model Commands**: New `poseidon models list` and `poseidon config init` for interactive model configuration.
 - **ConfigManager.get_model_routing()**: Returns `ModelRouting` object with defaults.
 
 ### Changed

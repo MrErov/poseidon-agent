@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from poseidon.main import app
+from poseidon.model_router import DEFAULT_MODEL_ROUTING
 from poseidon.version import get_version
 
 cli = CliRunner()
@@ -157,15 +158,19 @@ def test_cli_local_executor_does_not_require_model(tmp_path: Path, monkeypatch) 
     completion.assert_not_called()
 
 
-def test_cli_api_executor_requires_model(tmp_path: Path, monkeypatch) -> None:
+def test_cli_api_executor_uses_routing_default(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / ".meta-skills"
+    skills_dir.mkdir()
+    (skills_dir / "00-context-bootstrap.md").write_text(
+        "Mapea el repositorio", encoding="utf-8"
+    )
 
-    with patch("poseidon.core.litellm.completion") as completion:
+    with patch("poseidon.core.litellm.completion", return_value=_response()) as completion:
         result = cli.invoke(app, ["run", "--phase", "0"])
 
-    assert result.exit_code == 1
-    assert "--model is required" in result.output
-    completion.assert_not_called()
+    assert result.exit_code == 0, result.output
+    assert completion.call_args.kwargs["model"] == DEFAULT_MODEL_ROUTING.planner
 
 
 def test_cli_role_selects_herdr(tmp_path: Path, monkeypatch) -> None:
