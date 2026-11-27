@@ -48,8 +48,21 @@ jobs:
         run: |
           # Install Inno Setup
           choco install innosetup -y --no-progress
-          # Verify Inno Setup installation
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /?
+          # Find ISCC.exe location
+          $isccPaths = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+            "C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
+          )
+          $ISCC = $null
+          foreach ($p in $isccPaths) {
+            if (Test-Path $p) { $ISCC = $p; break }
+          }
+          if (-not $ISCC) {
+            Write-Error "ISCC.exe not found after Inno Setup installation"
+            exit 1
+          }
+          Write-Host "Using ISCC at: $ISCC"
           # Create installer script
           cat > installer.iss << 'EOF'
           [Setup]
@@ -79,7 +92,7 @@ jobs:
           $version = $version.TrimStart('v')
           (Get-Content installer.iss) -replace '{{VERSION}}', $version | Set-Content installer.iss
           # Build installer
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          & $ISCC installer.iss
           # Verify output
           if (Test-Path "dist\poseidon-agent-setup.exe") {
             Write-Host "Installer created successfully: dist\poseidon-agent-setup.exe"
