@@ -58,6 +58,9 @@ packages = ["src/poseidon"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# `tests/test_health_api.py` imports `examples.health_api.main`, so the repository
+# root must be importable. Without this the suite only passes with PYTHONPATH=".".
+pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py310"
