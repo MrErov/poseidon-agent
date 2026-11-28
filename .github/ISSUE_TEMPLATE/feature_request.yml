@@ -1,0 +1,63 @@
+name: Feature request
+description: Propose a change to Poseidon Agent or a Keel Nav phase
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A feature that touches the protocol improves the most when it arrives as a spec: acceptance criteria first, code second.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before opening
+      options:
+        - label: I searched existing issues and discussions for this
+          required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Affected phase
+      description: Which Keel Nav phase does this change touch?
+      options:
+        - 0 / context (context bootstrap)
+        - 1a / spec (spec writer)
+        - 1b / goldfish (blind audit)
+        - 2 / tdd
+        - 3 / odd
+        - 4 / drift
+        - Engine or CLI (not phase-specific)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is impossible or error-prone today? What does the caller of the engine hit?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should happen, and what are the acceptance criteria?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: capacity
+    attributes:
+      label: Willing to help
+      options:
+        - label: I can write the spec for this
+        - label: I can implement this with tests

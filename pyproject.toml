@@ -44,6 +44,9 @@ dev = [
     "fastapi>=0.115,<1",
     "pytest>=8.3,<10",
     "ruff>=0.8,<1",
+    # The test suite patches `poseidon.core.litellm.completion`,
+    # so the API executor's optional dependency must be installed for tests.
+    "litellm>=1.60,<2",
 ]
 
 [project.scripts]

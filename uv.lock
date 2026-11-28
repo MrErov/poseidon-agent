@@ -2015,6 +2015,7 @@ binary = [
 dev = [
     { name = "fastapi", version = "0.162.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "fastapi", version = "0.165.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "litellm" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -2024,6 +2025,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "litellm", marker = "extra == 'api'", specifier = ">=1.60,<2" },
+    { name = "litellm", marker = "extra == 'dev'", specifier = ">=1.60,<2" },
     { name = "pyinstaller", marker = "extra == 'binary'", specifier = ">=6.11,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<10" },
     { name = "python-dotenv", specifier = ">=1.0,<2" },

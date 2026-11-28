@@ -33,7 +33,7 @@
 
 Poseidon is the deterministic execution engine for the **[Keel Nav](https://github.com/MrErov/keel-nav)** protocol. It turns a guided map into auditable software: it isolates memory, delegates inference, persists artifacts and enforces state transitions — the Navigator stays in control of every step.
 
-**Contents:** [Quickstart](#quickstart) · [Why Poseidon?](#why-poseidon) · [Four Pillars](#four-pillars) · [Architecture](#architecture) · [Installation](#installation) · [Usage](#usage) · [How It Works](#how-it-works) · [Development](#development) · [Changelog](#changelog-highlights) · [License](#license)
+**Contents:** [Quickstart](#quickstart) · [Why Poseidon?](#why-poseidon) · [Four Pillars](#four-pillars) · [Architecture](#architecture) · [Installation](#installation) · [Usage](#usage) · [How It Works](#how-it-works) · [Development](#development) · [Support](#support) · [Changelog](#changelog-highlights) · [License](#license)
 
 ---
 
@@ -427,6 +427,14 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 - **v3.1.0** — Secure Gatekeeper, strict state transitions, frontmatter-only verdict extraction.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+---
+
+## Support
+
+- [Contributing](CONTRIBUTING.md) — development setup, the ground rules, and how to map a change onto a Keel Nav phase.
+- [Security policy](SECURITY.md) — supported versions, private vulnerability reporting, and the local attack surface.
+- [Issues](https://github.com/MrErov/poseidon-agent/issues) — bugs and feature requests, with a form for each.
 
 ---
 

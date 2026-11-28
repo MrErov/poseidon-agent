@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a reproducible defect in Poseidon Agent
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do **not** paste `NVIDIA_NIM_API_KEY` or any token. Mask everything under `config.yaml` and `.env`.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before opening
+      options:
+        - label: I reproduced this on the latest tagged release
+          required: true
+        - label: I searched existing issues for this symptom
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Poseidon version
+      description: "`poseidon --version` (or the value in src/poseidon/version.py)"
+      placeholder: "4.1.3"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: executor
+    attributes:
+      label: Executor
+      options:
+        - api
+        - claude-code
+        - codex
+        - opencode
+        - herdr
+        - not executor-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Command and reproduction
+      description: The exact command, phase alias, spec and context paths.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the relevant traceback, not the whole terminal dump.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: config.yaml excerpt
+      description: Mask keys. Roles, phase_roles, herdr and executor settings are usually the interesting part.
+    validations:
+      required: false
