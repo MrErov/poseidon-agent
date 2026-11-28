@@ -31,7 +31,13 @@
   <img src="docs/assets/tui-demo.gif" alt="Poseidon Agent TUI demo" width="800">
 </div>
 
-## 🚀 5-Minute Quickstart
+Poseidon is the deterministic execution engine for the **[Keel Nav](https://github.com/MrErov/keel-nav)** protocol. It turns a guided map into auditable software: it isolates memory, delegates inference, persists artifacts and enforces state transitions — the Navigator stays in control of every step.
+
+**Contents:** [Quickstart](#quickstart) · [Why Poseidon?](#why-poseidon) · [Four Pillars](#four-pillars) · [Architecture](#architecture) · [Installation](#installation) · [Usage](#usage) · [How It Works](#how-it-works) · [Development](#development) · [Changelog](#changelog-highlights) · [License](#license)
+
+---
+
+## Quickstart
 
 ```bash
 # 1. Install (Python 3.10+, uv recommended)
@@ -59,13 +65,11 @@ poseidon run -i
 
 **No config?** Poseidon ships with built-in NVIDIA NIM defaults: `uv tool install poseidon-agent` → `cd your-project` → `poseidon run -i`. Run `poseidon models list` to see the active phase → model routing.
 
----
-
-Poseidón is the deterministic execution engine for the **Keel Nav** protocol. It turns a guided map into auditable software: it isolates memory, delegates inference, persists artifacts and enforces state transitions — the Navigator stays in control of every step.
+> The `.meta-skills/` directory comes from [Keel Nav](https://github.com/MrErov/keel-nav); it holds the phase templates that Poseidon resolves against your project.
 
 ---
 
-## 🎯 Why Poseidon?
+## Why Poseidon?
 
 | | Free-Loop Agents (Hermes, AutoGPT, etc.) | **Poseidon Agent** |
 |:---|:---|:---|
@@ -79,7 +83,7 @@ Poseidón is the deterministic execution engine for the **Keel Nav** protocol. I
 
 ---
 
-## 🏛️ Four Pillars of Poseidon
+## Four Pillars
 
 | Pillar | Description |
 |--------|-------------|
@@ -87,6 +91,8 @@ Poseidón is the deterministic execution engine for the **Keel Nav** protocol. I
 | **🏠 Full Local & OS Agency** | Persistent Herdr terminals, local CLIs, isolated subprocesses — no shell, prompts via stdin. Your machine, your rules. |
 | **🛡️ Human-in-the-Loop** | Gatekeeper blocks unapproved work; artifacts and verdicts keep every decision inspectable. The human stays in command. |
 | **🌐 Multi-Channel** | CLI today, interactive Textual TUI now, future desktop channels. One engine, multiple interfaces. |
+
+---
 
 ## Architecture
 
@@ -105,39 +111,26 @@ graph LR
     ART --> SM
 ```
 
-## Ecosystem
+### Ecosystem
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Keel Nav** | Defines the phases, templates, gates and conventions that make up Cold Memory. |
-| **Poseidón Agent** | Resolves phases, isolates memory, delegates inference, saves artifacts and enforces the state machine. |
-| **DeepSeek plugin** | Provides invocation inside the DeepSeek experience; it neither replaces the engine nor implies use of the DeepSeek API. |
+| **[Keel Nav](https://github.com/MrErov/keel-nav)** | Defines the phases, templates, gates and conventions that make up Cold Memory. |
+| **Poseidon Agent** | Resolves phases, isolates memory, delegates inference, saves artifacts and enforces the state machine. |
 | **NVIDIA NIM or local CLIs** | Execute inference through LiteLLM or Claude Code, Codex and OpenCode. |
 | **Graphify MCP** | Optionally injects dynamic code-graph context into Phases 1a and 1b. |
 
-## Memory Model
+---
 
-- **Cold Memory:** instructions resolved from `.meta-skills/` using a phase alias or exact filename; phases belong to the target project, not to Poseidón.
-- **Hot Memory:** a new message list for every call, with no previous history.
-- **Context:** the content of `--context` is injected before `--spec` into Hot Memory.
-- **Goldfish Audit:** any phase resolved as `02-egm-goldfish-audit` displays its memory-isolation warning and runs without history.
+## Installation
 
-## Phase Aliases
+### Requirements
 
-| Alias | File in `.meta-skills/` |
-|-------|--------------------------|
-| `0`, `00`, `context` | `00-context-bootstrap.md` |
-| `1a`, `spec` | `01-sdd-spec-writer.md` |
-| `1b`, `goldfish` | `02-egm-goldfish-audit.md` |
-| `2`, `tdd` | `03-tdd-cycle.md` |
-| `3`, `odd` | `04-odd-vertical-slice.md` |
-| `4`, `drift` | `05-drift-control.md` |
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended) or `pip`
+- An NVIDIA NIM API key, or a local CLI (Claude Code, Codex, OpenCode)
 
-You can also provide the exact filename, with or without `.md`. If the phase does not match an alias, Poseidón searches for a Markdown file whose name starts with or contains the phase. If no match is found, it stops with a controlled error.
-
-## Requirements and Installation
-
-Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+### Install from source
 
 ```bash
 uv venv
@@ -146,6 +139,8 @@ uv venv
 uv pip install -e .
 ```
 
+### Credentials
+
 Create a `.env` file with your NVIDIA NIM credential (Graphify is optional):
 
 ```dotenv
@@ -153,28 +148,33 @@ NVIDIA_NIM_API_KEY=...
 # GRAPHIFY_MCP_URL=https://api.graphify.com/mcp
 ```
 
-### Standalone binary (optional)
+### Standalone binary
 
-If you don't want to use Python, download the executable binary from the releases page.
+If you don't want to use Python, download the executable from the [releases page](https://github.com/MrErov/poseidon-agent/releases/latest):
 
-Build it locally with PyInstaller:
+- `poseidon.exe` — Windows (an Inno Setup installer, `poseidon-agent-setup.exe`, is also published)
+- `poseidon-linux-amd64` — Linux
+- `poseidon-macos-arm64` — macOS
+
+Or build it locally with PyInstaller:
 
 ```powershell
+# Windows
 ./scripts/build_binary.ps1
 ```
 
 ```bash
+# Linux / macOS
 ./scripts/build_binary.sh
 ```
 
-The one-file executables are written to `dist/`:
-- `poseidon.exe` (Windows)
-- `poseidon-linux-amd64` (Linux)
-- `poseidon-macos-arm64` (macOS)
+The one-file executables are written to `dist/`.
+
+---
 
 ## Usage
 
-Run Poseidón from the project root containing `.meta-skills/`:
+Run Poseidon from the project root containing `.meta-skills/`:
 
 ```bash
 poseidon run --phase 00-context-bootstrap --model nvidia_nim/<available-model>
@@ -182,7 +182,7 @@ poseidon run --phase 1a --spec specs/US-001.md --context docs/context/api.md --m
 poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --model nvidia_nim/<available-model>
 ```
 
-### Smart Defaults & Interactive Wizard
+### Smart defaults & interactive wizard
 
 `--spec` and `--role` are optional:
 
@@ -190,12 +190,12 @@ poseidon run --phase 1b --spec specs/US-001.md --context docs/context/api.md --m
 poseidon run --phase 1b
 ```
 
-- When `specs/` contains exactly one `*.spec.md`, Poseidón uses it and prints `ℹ️ Auto-detected spec: specs/US-002.spec.md`.
+- When `specs/` contains exactly one `*.spec.md`, Poseidon uses it and prints `ℹ️ Auto-detected spec: specs/US-002.spec.md`.
 - The role is resolved from `--role`, then `phase_roles`, then `default_role` in `config.yaml`, and finally `tester`.
 - `poseidon run` without arguments or with `-i` opens a wizard for phase, spec, and role.
 - `poseidon status` prints a Rich table with available phases, each spec's `status:`, and the default role.
 
-### Power-User Commands
+### Power-user commands
 
 ```bash
 # Environment health: .meta-skills, config.yaml, hc in PATH, API keys
@@ -222,9 +222,9 @@ poseidon run --phase 1b --executor herdr --resume t19
 
 Sessions are saved to `.poseidon/sessions/` after every successful API call, so a timeout or network drop costs you nothing on retry.
 
-### Agents & Executors
+### Agents & executors
 
-Poseidón runs phases through five interchangeable executors. Choose one per run with `--executor`, or bind it to a role in `config.yaml`.
+Poseidon runs phases through five interchangeable executors. Choose one per run with `--executor`, or bind it to a role in `config.yaml`.
 
 | Agent | CLI / Flag | What you get |
 |-------|-----------|--------------|
@@ -249,7 +249,7 @@ poseidon run --phase 1b --spec specs/US-001.md --executor herdr
 
 `--model` is required with `--executor api`; local executors manage their own auth. All subprocesses use `shell=False`, a 300 s timeout and controlled errors. Override binaries with `POSEIDON_CLAUDE_CODE_BIN`, `POSEIDON_CODEX_BIN` or `POSEIDON_OPENCODE_BIN`.
 
-### Agent Roles & Herdr
+### Agent roles & Herdr
 
 ```yaml
 version: 2
@@ -294,7 +294,6 @@ Precedence: CLI flags → role → `phase_roles` → API defaults. Herdr uses on
 
 **Headless machine execution:** `herdr.mode: headless` still supports one-shot `machine.exec` calls with base64 stdin, capped at 600 seconds. OpenCode uses `opencode run --format json` with stdin (no `-` argument).
 
-
 ### Troubleshooting Herdr
 
 #### Long phases and resumable waiting
@@ -305,7 +304,7 @@ If the total deadline is reached, the terminal remains alive. Reattach to the sa
 
 #### Environment prerequisites (B1)
 
-On Windows, the Python interpreter running Poseidon must have **Medium Mandatory Level** integrity. If you see `os error 5` when calling `hc connect`, check `icacls <project-path>` and `whoami /groups`: a project marked `Mandatory Label\\Low Mandatory Level` runs Python in Low IL and cannot open Herdr's Medium-IL named pipe. Use Python outside the Low-IL directory or run `icacls ".venv" "/setintegritylevel" "(OI)(CI)M" "/T"` (works without admin).
+On Windows, the Python interpreter running Poseidon must have **Medium Mandatory Level** integrity. If you see `os error 5` when calling `hc connect`, check `icacls <project-path>` and `whoami /groups`: a project marked `Mandatory Label\Low Mandatory Level` runs Python in Low IL and cannot open Herdr's Medium-IL named pipe. Use Python outside the Low-IL directory or run `icacls ".venv" "/setintegritylevel" "(OI)(CI)M" "/T"` (works without admin).
 
 The OpenCode model must exist in the catalog shown by `opencode models`. The default `nvidia/nvidia/moonshotai/kimi-k3.1-pro` does not exist; use `nvidia/nvidia/nemotron-3-ultra-550b-a55b` or pass a valid `herdr.agent_model`. An empty `agent_model` leaves model selection to OpenCode's default configuration, so an invalid default model can still fail.
 
@@ -348,7 +347,31 @@ The layout adapts to the terminal size:
 
 A spinner and symbolic status (`● Ready`, `✓ Completed`, `! Cancelled`, `✗ Error`) show what the app is doing, and every color comes from Textual theme tokens so light and dark themes stay readable.
 
-### Automatic Artifacts
+---
+
+## How It Works
+
+### Memory model
+
+- **Cold Memory:** instructions resolved from `.meta-skills/` using a phase alias or exact filename; phases belong to the target project, not to Poseidon.
+- **Hot Memory:** a new message list for every call, with no previous history.
+- **Context:** the content of `--context` is injected before `--spec` into Hot Memory.
+- **Goldfish Audit:** any phase resolved as `02-egm-goldfish-audit` displays its memory-isolation warning and runs without history.
+
+### Phase aliases
+
+| Alias | File in `.meta-skills/` |
+|-------|--------------------------|
+| `0`, `00`, `context` | `00-context-bootstrap.md` |
+| `1a`, `spec` | `01-sdd-spec-writer.md` |
+| `1b`, `goldfish` | `02-egm-goldfish-audit.md` |
+| `2`, `tdd` | `03-tdd-cycle.md` |
+| `3`, `odd` | `04-odd-vertical-slice.md` |
+| `4`, `drift` | `05-drift-control.md` |
+
+You can also provide the exact filename, with or without `.md`. If the phase does not match an alias, Poseidon searches for a Markdown file whose name starts with or contains the phase. If no match is found, it stops with a controlled error.
+
+### Automatic artifacts
 
 | Phase | Generated file |
 |-------|----------------|
@@ -360,9 +383,11 @@ A spinner and symbolic status (`● Ready`, `✓ Completed`, `! Cancelled`, `✗
 
 Writes are atomic (temp file + `os.replace`). Verdicts come only from the report frontmatter via `yaml.safe_load`; free text is ignored.
 
-### Spec State Machine
+### Spec state machine
 
 Valid transitions: `draft → audited → {approved, observed} → certified`. Illegal jumps raise `IllegalTransitionError`. Phase 2 requires `audited` or `approved` before any inference call.
+
+---
 
 ## Development
 
@@ -373,15 +398,19 @@ uv run ruff check .
 vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 ```
 
+---
+
 ## Changelog Highlights
 
+- **v4.1.3 (Integrity)** — MIT `LICENSE` added, Linux/macOS binaries renamed (`poseidon-linux-amd64`, `poseidon-macos-arm64`) to stop the release-asset collision, docs and badges aligned.
+- **v4.1.2** — Windows installer pipeline hardened: the Inno Setup step now fails loudly and `poseidon-agent-setup.exe` is verified and uploaded on every tagged release. 213 tests confirmed.
 - **v4.1.1 (Plug & Play)** — `poseidon config init` wizard, `poseidon models list`, and out-of-the-box phase-based model routing for the API executor.
 - **v4.1.0** — Multi-Model Routing: `ModelRouter`, `model_routing` in `config.yaml`, and the TUI model dropdown.
 - **v4.0.0 (Golden Master)** — Production-ready release: Responsive TUI with design tokens, Herdr delegation with terminal management, MCP Registry Manager (`mcp list|sync`), API Session Resume, `poseidon doctor`, JSONL logging, optional `litellm`, Release Pipeline (Inno Setup, cosign), 214 tests.
 - **v3.9.0** — MCP Registry Manager (`poseidon mcp list|sync`), API Session Resume, Release Pipeline (Inno Setup + cosign).
 - **v3.8.0** — `poseidon doctor`, structured JSONL logging, optional `litellm` dependency, Quickstart docs.
-- **v3.7.1** - Frozen binary support, cooperative cancellation, Herdr terminal cleanup, PyInstaller hardening.
-- **v3.7.0** - Responsive TUI, theme tokens, live spinner, and PyInstaller builds.
+- **v3.7.1** — Frozen binary support, cooperative cancellation, Herdr terminal cleanup, PyInstaller hardening.
+- **v3.7.0** — Responsive TUI, theme tokens, live spinner, and PyInstaller builds.
 - **v3.6.1** — Fully English auto-detect notice.
 - **v3.6.0** — Interactive wizard, smart defaults, and `poseidon status`.
 - **v3.5.7** — English CLI/TUI messages and strict US-002 re-audit.
@@ -397,8 +426,10 @@ vhs demo.tape   # regenerates docs/assets/tui-demo.gif
 - **v3.2.0** — TUI inputs, Herdr JSON-RPC hardening, 300 s timeout, `Ctrl+X` cancellation.
 - **v3.1.0** — Secure Gatekeeper, strict state transitions, frontmatter-only verdict extraction.
 
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+---
+
 ## License
 
-MIT License.
-#   C I   t r i g g e r  
- 
+MIT License. See [LICENSE](LICENSE).
