@@ -20,6 +20,7 @@ dependencies = [
     "questionary>=2.0,<3",
     "rich>=13.7,<15",
     "textual>=0.85,<10",
+    "tomli>=2.0,<3; python_version < '3.11'",
     "typer>=0.16,<1",
 ]
 classifiers = [

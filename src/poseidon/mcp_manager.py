@@ -12,7 +12,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import tomllib
+if sys.version_info >= (3, 11):  # noqa: UP035
+    import tomllib
+else:  # Python 3.10 has no stdlib TOML reader
+    import tomli as tomllib
 
 
 def get_config_paths() -> dict[str, Path]:
