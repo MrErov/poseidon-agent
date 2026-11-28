@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [4.1.3] - 2026-11-27
+### Added
+- **LICENSE**: Added MIT license file to satisfy distribution requirements and match `pyproject.toml` metadata.
+### Fixed
+- **Binary Naming Collision**: Linux and macOS binaries now named `poseidon-linux-amd64` and `poseidon-macos-arm64` to avoid artifact overwrite in release workflow.
+### Changed
+- **Metadata**: Updated version badges, package metadata, and documentation to reflect v4.1.3.
+
 ## [4.1.2] - 2026-11-27
 ### Fixed
 - **Windows Installer Pipeline**: Removed `continue-on-error: true` from Inno Setup step; added explicit verification (`Test-Path`) and `shell: powershell` to ensure the installer artifact is built and uploaded on every tagged release.

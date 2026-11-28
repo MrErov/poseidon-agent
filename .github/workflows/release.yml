@@ -156,11 +156,14 @@ jobs:
         run: |
           uv run pyinstaller --clean --noconfirm build.spec
 
+      - name: Rename Linux binary
+        run: mv dist/poseidon dist/poseidon-linux-amd64
+
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
           name: poseidon-linux-binary
-          path: dist/poseidon
+          path: dist/poseidon-linux-amd64
           retention-days: 30
 
   build-macos:
@@ -190,11 +193,14 @@ jobs:
         run: |
           uv run pyinstaller --clean --noconfirm build.spec
 
+      - name: Rename macOS binary
+        run: mv dist/poseidon dist/poseidon-macos-arm64
+
       - name: Upload macOS binary
         uses: actions/upload-artifact@v4
         with:
           name: poseidon-macos-binary
-          path: dist/poseidon
+          path: dist/poseidon-macos-arm64
           retention-days: 30
 
   release:
@@ -233,7 +239,8 @@ jobs:
           prerelease: false
           files: |
             dist/poseidon.exe
-            dist/poseidon
+            dist/poseidon-linux-amd64
+            dist/poseidon-macos-arm64
             dist/poseidon-agent-setup.exe
           generate_release_notes: false
         if: always()
@@ -250,7 +257,8 @@ jobs:
 
           # Sign binaries
           echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon.exe.sig dist/poseidon.exe
-          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon.sig dist/poseidon
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon-linux-amd64.sig dist/poseidon-linux-amd64
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon-macos-arm64.sig dist/poseidon-macos-arm64
           echo "${{ secrets.COSIGN_PRIVATE_KEY }}" | cosign sign-blob --key=env://COSIGN_PRIVATE_KEY --output-signature dist/poseidon-agent-setup.exe.sig dist/poseidon-agent-setup.exe
 
       - name: Upload signatures
